@@ -3,11 +3,11 @@
 
 // ===== DEBUG & DIFFICULTY SETTINGS =====
 const DEBUG_MODE = true;           // Set to true for testing
-const DEBUG_START_WAVE = 10;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
+const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
-const DIFFICULTY = 1;            // Difficulty multiplier
+const DIFFICULTY = 0.5;            // Difficulty multiplier
 // Examples:
 // 0.1 = Very Easy (10% enemy health, 10% enemy count, faster shooting)
 // 0.5 = Easy (50% enemy health, 50% enemy count)
@@ -318,7 +318,25 @@ class GameScene extends Phaser.Scene {
     wallRightBottom.body.setSize(20, 280);
     wallRightBottom.setVisible(false);
 
-    // Door zones (sin colisión, solo para detección)
+    // Muros de puertas (se activan/desactivan dinámicamente)
+    this.doorWalls = this.physics.add.staticGroup();
+    this.doorWallTop = this.doorWalls.create(400, 10, null);
+    this.doorWallTop.body.setSize(40, 20);
+    this.doorWallTop.setVisible(false);
+
+    this.doorWallBottom = this.doorWalls.create(400, 590, null);
+    this.doorWallBottom.body.setSize(40, 20);
+    this.doorWallBottom.setVisible(false);
+
+    this.doorWallLeft = this.doorWalls.create(10, 300, null);
+    this.doorWallLeft.body.setSize(20, 40);
+    this.doorWallLeft.setVisible(false);
+
+    this.doorWallRight = this.doorWalls.create(790, 300, null);
+    this.doorWallRight.body.setSize(20, 40);
+    this.doorWallRight.setVisible(false);
+
+    // Door zones (overlap para detección cuando están abiertas)
     this.doorZones = this.physics.add.staticGroup();
     this.doorTop = this.doorZones.create(400, 10, null);
     this.doorTop.body.setSize(40, 20);
@@ -374,16 +392,21 @@ class GameScene extends Phaser.Scene {
     // Collisions
     this.players.forEach(p => {
       this.physics.add.collider(p, this.walls);
+      this.physics.add.collider(p, this.doorWalls);
       this.physics.add.collider(p, this.obstacles);
     });
 
     this.physics.add.collider(this.playerBullets, this.walls, (b) => b.destroy());
+    this.physics.add.collider(this.playerBullets, this.doorWalls, (b) => b.destroy());
     this.physics.add.collider(this.playerBullets, this.obstacles, (b) => b.destroy());
     this.physics.add.collider(this.playerSpecialBullets, this.walls, (b) => b.destroy());
+    this.physics.add.collider(this.playerSpecialBullets, this.doorWalls, (b) => b.destroy());
     this.physics.add.collider(this.playerSpecialBullets, this.obstacles, (b) => b.destroy());
     this.physics.add.collider(this.enemyBullets, this.walls, (b) => b.destroy());
+    this.physics.add.collider(this.enemyBullets, this.doorWalls, (b) => b.destroy());
     this.physics.add.collider(this.enemyBullets, this.obstacles, (b) => b.destroy());
     this.physics.add.collider(this.enemies, this.walls);
+    this.physics.add.collider(this.enemies, this.doorWalls);
     this.physics.add.collider(this.enemies, this.obstacles);
 
     // Player bullets hit enemies
@@ -834,13 +857,16 @@ class GameScene extends Phaser.Scene {
     } else if (enemy.type === 'pentagon') {
       // Draw pentagon using 5 vertices
       const radius = 17;
-      const points = [];
+      this.graphics.beginPath();
       for (let i = 0; i < 5; i++) {
-        const angle = (i * Math.PI * 2 / 5) - Math.PI / 2; // Start from top
-        points.push(enemy.x + Math.cos(angle) * radius);
-        points.push(enemy.y + Math.sin(angle) * radius);
+        const angle = (i * Math.PI * 2 / 5) - Math.PI / 2;
+        const x = enemy.x + Math.cos(angle) * radius;
+        const y = enemy.y + Math.sin(angle) * radius;
+        if (i === 0) this.graphics.moveTo(x, y);
+        else this.graphics.lineTo(x, y);
       }
-      this.graphics.fillPoints(points, true);
+      this.graphics.closePath();
+      this.graphics.fillPath();
     }
   }
 
@@ -865,7 +891,7 @@ class GameScene extends Phaser.Scene {
         this.score += typeData.points;
         this.scoreText.setText('Score: ' + this.score);
         this.bossActive = false;
-        this.doorsOpen = true;
+        this.openDoors();
         this.playSound(600, 0.3);
 
         // Show message
@@ -1152,36 +1178,45 @@ class GameScene extends Phaser.Scene {
 
     if (boss.bossType === 'pattern') {
       // Draw star (8 points)
-      const points = [];
+      this.graphics.beginPath();
       for (let i = 0; i < 8; i++) {
         const angle = i * Math.PI / 4 - Math.PI / 2;
         const radius = i % 2 === 0 ? 30 : 15;
-        points.push(boss.x + Math.cos(angle) * radius);
-        points.push(boss.y + Math.sin(angle) * radius);
+        const x = boss.x + Math.cos(angle) * radius;
+        const y = boss.y + Math.sin(angle) * radius;
+        if (i === 0) this.graphics.moveTo(x, y);
+        else this.graphics.lineTo(x, y);
       }
-      this.graphics.fillPoints(points, true);
+      this.graphics.closePath();
+      this.graphics.fillPath();
     } else if (boss.bossType === 'laser') {
       // Draw octagon with rotation
       this.graphics.save();
       this.graphics.translateCanvas(boss.x, boss.y);
       this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-      const points = [];
+      this.graphics.beginPath();
       for (let i = 0; i < 8; i++) {
         const angle = i * Math.PI / 4;
-        points.push(Math.cos(angle) * 40);
-        points.push(Math.sin(angle) * 40);
+        const x = Math.cos(angle) * 40;
+        const y = Math.sin(angle) * 40;
+        if (i === 0) this.graphics.moveTo(x, y);
+        else this.graphics.lineTo(x, y);
       }
-      this.graphics.fillPoints(points, true);
+      this.graphics.closePath();
+      this.graphics.fillPath();
       this.graphics.restore();
     } else if (boss.bossType === 'phase' && !boss.hasChildren) {
       // Draw hexagon
-      const points = [];
+      this.graphics.beginPath();
       for (let i = 0; i < 6; i++) {
         const angle = i * Math.PI / 3 - Math.PI / 2;
-        points.push(boss.x + Math.cos(angle) * 35);
-        points.push(boss.y + Math.sin(angle) * 35);
+        const x = boss.x + Math.cos(angle) * 35;
+        const y = boss.y + Math.sin(angle) * 35;
+        if (i === 0) this.graphics.moveTo(x, y);
+        else this.graphics.lineTo(x, y);
       }
-      this.graphics.fillPoints(points, true);
+      this.graphics.closePath();
+      this.graphics.fillPath();
     }
 
     // Draw health bar
@@ -1223,6 +1258,28 @@ class GameScene extends Phaser.Scene {
     this.playSound(400, 0.2);
   }
 
+  openDoors() {
+    this.doorsOpen = true;
+
+    // Desactivar colisión de los muros de las puertas
+    this.doorWallTop.body.enable = false;
+    this.doorWallBottom.body.enable = false;
+    this.doorWallLeft.body.enable = false;
+    this.doorWallRight.body.enable = false;
+
+    console.log('¡Puertas abiertas!');
+  }
+
+  closeDoors() {
+    this.doorsOpen = false;
+
+    // Reactivar colisión de los muros de las puertas
+    this.doorWallTop.body.enable = true;
+    this.doorWallBottom.body.enable = true;
+    this.doorWallLeft.body.enable = true;
+    this.doorWallRight.body.enable = true;
+  }
+
   handleDoorOverlap(player, door) {
     if (!this.doorsOpen || this.transitioning) return;
 
@@ -1235,15 +1292,15 @@ class GameScene extends Phaser.Scene {
     this.transitioning = true;
 
     this.level++;
-    this.doorsOpen = false;
+    this.closeDoors(); // Cerrar puertas para el nuevo nivel
 
-    console.log('Avanzando al nivel:', this.level);
+    console.log('Avanzando al nivel:', this.level, 'Wave actual:', this.wave);
 
-    // Restart scene with new level
+    // Restart scene with new level, manteniendo el wave actual
     this.scene.restart({
       players: this.numPlayers,
       level: this.level,
-      wave: (this.level - 1) * 10,
+      wave: this.wave, // Mantener el wave donde estábamos
       score: this.score
     });
   }
