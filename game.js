@@ -1,5 +1,5 @@
-// Platanus Hack 25: Snake Game
-// Navigate the snake around the "PLATANUS HACK ARCADE" title made of blocks!
+// Battle Arena - Top-Down Shooter
+// Choose 1 or 2 players and battle in the arena!
 
 // =============================================================================
 // ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
@@ -74,363 +74,447 @@ for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
   }
 }
 
+
+// MENU SCENE
+class MenuScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'MenuScene' });
+  }
+
+  create() {
+    // Title
+    this.add.text(400, 100, 'BATTLE ARENA', {
+      fontSize: '48px',
+      fontFamily: 'Arial',
+      color: '#ff0000',
+      stroke: '#000',
+      strokeThickness: 6
+    }).setOrigin(0.5);
+
+    // 1 Player button
+    const btn1 = this.add.rectangle(400, 280, 300, 80, 0x00ff00);
+    this.add.text(400, 280, '1 PLAYER', {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#000'
+    }).setOrigin(0.5);
+
+    btn1.setInteractive({ useHandCursor: true });
+    btn1.on('pointerover', () => btn1.setFillStyle(0x00dd00));
+    btn1.on('pointerout', () => btn1.setFillStyle(0x00ff00));
+    btn1.on('pointerdown', () => {
+      this.scene.start('GameScene', { players: 1 });
+    });
+
+    // 2 Players button
+    const btn2 = this.add.rectangle(400, 400, 300, 80, 0x0099ff);
+    this.add.text(400, 400, '2 PLAYERS', {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#fff'
+    }).setOrigin(0.5);
+
+    btn2.setInteractive({ useHandCursor: true });
+    btn2.on('pointerover', () => btn2.setFillStyle(0x0077dd));
+    btn2.on('pointerout', () => btn2.setFillStyle(0x0099ff));
+    btn2.on('pointerdown', () => {
+      this.scene.start('GameScene', { players: 2 });
+    });
+
+    // Instructions
+    this.add.text(400, 520, 'P1: WASD + Q + E | P2: IJKL + U + O', {
+      fontSize: '14px',
+      fontFamily: 'Arial',
+      color: '#888'
+    }).setOrigin(0.5);
+  }
+}
+
+// GAME SCENE
+class GameScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'GameScene' });
+  }
+
+  init(data) {
+    this.numPlayers = data.players || 1;
+  }
+
+  create() {
+    this.gameOver = false;
+
+    // Graphics object (create once, reuse every frame)
+    this.graphics = this.add.graphics();
+
+    // Arena walls (invisible physics bodies) - centered
+    this.walls = this.physics.add.staticGroup();
+    const wallTop = this.walls.create(400, 10, null);
+    wallTop.body.setSize(800, 20);
+    wallTop.setVisible(false);
+
+    const wallBottom = this.walls.create(400, 590, null);
+    wallBottom.body.setSize(800, 20);
+    wallBottom.setVisible(false);
+
+    const wallLeft = this.walls.create(10, 300, null);
+    wallLeft.body.setSize(20, 600);
+    wallLeft.setVisible(false);
+
+    const wallRight = this.walls.create(790, 300, null);
+    wallRight.body.setSize(20, 600);
+    wallRight.setVisible(false);
+
+    // Obstacles (invisible physics bodies) - centered
+    this.obstacles = this.physics.add.staticGroup();
+    const obs1 = this.obstacles.create(200, 150, null);
+    obs1.body.setSize(60, 60);
+    obs1.setVisible(false);
+
+    const obs2 = this.obstacles.create(600, 150, null);
+    obs2.body.setSize(60, 60);
+    obs2.setVisible(false);
+
+    const obs3 = this.obstacles.create(200, 450, null);
+    obs3.body.setSize(60, 60);
+    obs3.setVisible(false);
+
+    const obs4 = this.obstacles.create(600, 450, null);
+    obs4.body.setSize(60, 60);
+    obs4.setVisible(false);
+
+    const obs5 = this.obstacles.create(400, 300, null);
+    obs5.body.setSize(80, 80);
+    obs5.setVisible(false);
+
+    // Player 1 (invisible physics body)
+    this.p1 = this.physics.add.sprite(150, 300, null);
+    this.p1.setSize(30, 30);
+    this.p1.setVisible(false);
+    this.p1.health = 100;
+    this.p1.speed = 200;
+    this.p1.angle = 0;
+
+    // Player 2 (or AI) (invisible physics body)
+    this.p2 = this.physics.add.sprite(650, 300, null);
+    this.p2.setSize(30, 30);
+    this.p2.setVisible(false);
+    this.p2.health = 100;
+    this.p2.speed = 200;
+    this.p2.angle = 180;
+
+    // Bullets
+    this.bullets = this.physics.add.group();
+    this.specialBullets = this.physics.add.group();
+
+    // Collisions
+    this.physics.add.collider(this.p1, this.walls);
+    this.physics.add.collider(this.p2, this.walls);
+    this.physics.add.collider(this.p1, this.obstacles);
+    this.physics.add.collider(this.p2, this.obstacles);
+    this.physics.add.collider(this.bullets, this.walls, (b) => b.destroy());
+    this.physics.add.collider(this.bullets, this.obstacles, (b) => b.destroy());
+    this.physics.add.collider(this.specialBullets, this.walls, (b) => b.destroy());
+    this.physics.add.collider(this.specialBullets, this.obstacles, (b) => b.destroy());
+
+    // Bullet hits
+    this.physics.add.overlap(this.bullets, this.p1, (p, b) => {
+      if (b.owner !== 1) this.hitPlayer(p, b, 1);
+    });
+    this.physics.add.overlap(this.bullets, this.p2, (p, b) => {
+      if (b.owner !== 2) this.hitPlayer(p, b, 2);
+    });
+    this.physics.add.overlap(this.specialBullets, this.p1, (p, b) => {
+      if (b.owner !== 1) this.hitPlayer(p, b, 1, true);
+    });
+    this.physics.add.overlap(this.specialBullets, this.p2, (p, b) => {
+      if (b.owner !== 2) this.hitPlayer(p, b, 2, true);
+    });
+
+    // Controls
+    this.keys = this.input.keyboard.addKeys({
+      w: 'W', a: 'A', s: 'S', d: 'D',
+      q: 'Q', e: 'E',
+      up: 'I', down: 'K', left: 'J', right: 'L',
+      shoot2: 'U', special2: 'O',
+      r: 'R'
+    });
+
+    // UI
+    this.hpText1 = this.add.text(20, 20, 'P1: 100 HP', {
+      fontSize: '20px',
+      fontFamily: 'Arial',
+      color: '#0f0'
+    });
+
+    this.hpText2 = this.add.text(780, 20, 'P2: 100 HP', {
+      fontSize: '20px',
+      fontFamily: 'Arial',
+      color: this.numPlayers === 2 ? '#09f' : '#f00'
+    }).setOrigin(1, 0);
+
+    // Cooldowns
+    this.lastShot1 = 0;
+    this.lastSpecial1 = 0;
+    this.lastShot2 = 0;
+    this.lastSpecial2 = 0;
+
+    // AI timer
+    this.aiTimer = 0;
+  }
+
+  update(time, delta) {
+    if (this.gameOver) return;
+
+    // Clear and redraw graphics every frame
+    this.graphics.clear();
+
+    // Draw walls
+    this.graphics.fillStyle(0x444444);
+    this.graphics.fillRect(0, 0, 800, 20);
+    this.graphics.fillRect(0, 580, 800, 20);
+    this.graphics.fillRect(0, 0, 20, 600);
+    this.graphics.fillRect(780, 0, 20, 600);
+
+    // Draw obstacles (draw from center to match physics bodies)
+    this.graphics.fillStyle(0x666666);
+    this.graphics.fillRect(200 - 30, 150 - 30, 60, 60);  // centered at 200, 150
+    this.graphics.fillRect(600 - 30, 150 - 30, 60, 60);  // centered at 600, 150
+    this.graphics.fillRect(200 - 30, 450 - 30, 60, 60);  // centered at 200, 450
+    this.graphics.fillRect(600 - 30, 450 - 30, 60, 60);  // centered at 600, 450
+    this.graphics.fillRect(400 - 40, 300 - 40, 80, 80);  // centered at 400, 300
+
+    // Draw players
+    this.graphics.fillStyle(0x00ff00);
+    this.graphics.fillCircle(this.p1.x, this.p1.y, 15);
+    this.graphics.lineStyle(3, 0x00ff00);
+    const angle1 = this.p1.angle * Math.PI / 180;
+    this.graphics.lineBetween(this.p1.x, this.p1.y,
+      this.p1.x + Math.cos(angle1) * 20,
+      this.p1.y + Math.sin(angle1) * 20);
+
+    this.graphics.fillStyle(this.numPlayers === 2 ? 0x0099ff : 0xff0000);
+    this.graphics.fillCircle(this.p2.x, this.p2.y, 15);
+    this.graphics.lineStyle(3, this.numPlayers === 2 ? 0x0099ff : 0xff0000);
+    const angle2 = this.p2.angle * Math.PI / 180;
+    this.graphics.lineBetween(this.p2.x, this.p2.y,
+      this.p2.x + Math.cos(angle2) * 20,
+      this.p2.y + Math.sin(angle2) * 20);
+
+    // Draw bullets
+    this.bullets.children.entries.forEach(b => {
+      this.graphics.fillStyle(b.color);
+      this.graphics.fillCircle(b.x, b.y, 4);
+    });
+
+    this.specialBullets.children.entries.forEach(b => {
+      this.graphics.fillStyle(b.color);
+      this.graphics.fillCircle(b.x, b.y, 8);
+      this.graphics.lineStyle(2, b.color, 0.5);
+      this.graphics.strokeCircle(b.x, b.y, 12);
+    });
+
+    // Player 1 movement
+    this.p1.setVelocity(0);
+    let moveX1 = 0, moveY1 = 0;
+    if (this.keys.w.isDown) moveY1 = -1;
+    if (this.keys.s.isDown) moveY1 = 1;
+    if (this.keys.a.isDown) moveX1 = -1;
+    if (this.keys.d.isDown) moveX1 = 1;
+
+    if (moveX1 !== 0 || moveY1 !== 0) {
+      this.p1.angle = Math.atan2(moveY1, moveX1) * 180 / Math.PI;
+      const len = Math.sqrt(moveX1*moveX1 + moveY1*moveY1);
+      this.p1.setVelocity(moveX1/len * this.p1.speed, moveY1/len * this.p1.speed);
+    }
+
+    // Player 1 shooting
+    if (Phaser.Input.Keyboard.JustDown(this.keys.q) && time - this.lastShot1 > 300) {
+      this.shoot(this.p1, 1, false);
+      this.lastShot1 = time;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.e) && time - this.lastSpecial1 > 2000) {
+      this.shoot(this.p1, 1, true);
+      this.lastSpecial1 = time;
+    }
+
+    // Player 2 or AI
+    if (this.numPlayers === 2) {
+      this.p2.setVelocity(0);
+      let moveX2 = 0, moveY2 = 0;
+      if (this.keys.up.isDown) moveY2 = -1;
+      if (this.keys.down.isDown) moveY2 = 1;
+      if (this.keys.left.isDown) moveX2 = -1;
+      if (this.keys.right.isDown) moveX2 = 1;
+
+      if (moveX2 !== 0 || moveY2 !== 0) {
+        this.p2.angle = Math.atan2(moveY2, moveX2) * 180 / Math.PI;
+        const len = Math.sqrt(moveX2*moveX2 + moveY2*moveY2);
+        this.p2.setVelocity(moveX2/len * this.p2.speed, moveY2/len * this.p2.speed);
+      }
+
+      if (Phaser.Input.Keyboard.JustDown(this.keys.shoot2) && time - this.lastShot2 > 300) {
+        this.shoot(this.p2, 2, false);
+        this.lastShot2 = time;
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keys.special2) && time - this.lastSpecial2 > 2000) {
+        this.shoot(this.p2, 2, true);
+        this.lastSpecial2 = time;
+      }
+    } else {
+      // Simple AI
+      this.aiTimer += delta;
+
+      if (this.aiTimer > 500) {
+        this.aiTimer = 0;
+        const dx = this.p1.x - this.p2.x;
+        const dy = this.p1.y - this.p2.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        this.p2.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+        if (dist > 200) {
+          this.p2.setVelocity(dx/dist * this.p2.speed, dy/dist * this.p2.speed);
+        } else if (dist < 150) {
+          this.p2.setVelocity(-dx/dist * this.p2.speed, -dy/dist * this.p2.speed);
+        } else {
+          this.p2.setVelocity(0);
+        }
+
+        if (Math.random() > 0.3 && time - this.lastShot2 > 800) {
+          this.shoot(this.p2, 2, false);
+          this.lastShot2 = time;
+        }
+        if (Math.random() > 0.9 && time - this.lastSpecial2 > 3000) {
+          this.shoot(this.p2, 2, true);
+          this.lastSpecial2 = time;
+        }
+      }
+    }
+
+    // Update UI
+    this.hpText1.setText('P1: ' + Math.max(0, Math.floor(this.p1.health)) + ' HP');
+    this.hpText2.setText('P2: ' + Math.max(0, Math.floor(this.p2.health)) + ' HP');
+  }
+
+  shoot(player, owner, special) {
+    const angle = player.angle * Math.PI / 180;
+    const speed = special ? 250 : 400;
+    const group = special ? this.specialBullets : this.bullets;
+
+    if (special) {
+      // Special: 3 bullets in spread
+      for (let i = -1; i <= 1; i++) {
+        const spreadAngle = angle + i * 0.3;
+        const b = group.create(
+          player.x + Math.cos(spreadAngle) * 25,
+          player.y + Math.sin(spreadAngle) * 25
+        );
+        b.setSize(16, 16);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
+        b.owner = owner;
+        b.color = owner === 1 ? 0x00ff00 : (this.numPlayers === 2 ? 0x0099ff : 0xff0000);
+
+        this.time.delayedCall(3000, () => {
+          if (b && b.active) b.destroy();
+        });
+      }
+      this.playSound(600, 0.15);
+    } else {
+      const b = group.create(
+        player.x + Math.cos(angle) * 25,
+        player.y + Math.sin(angle) * 25
+      );
+      b.setSize(8, 8);
+      b.setVisible(false);
+      b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+      b.owner = owner;
+      b.color = owner === 1 ? 0x00ff00 : (this.numPlayers === 2 ? 0x0099ff : 0xff0000);
+
+      this.time.delayedCall(2000, () => {
+        if (b && b.active) b.destroy();
+      });
+      this.playSound(800, 0.08);
+    }
+  }
+
+  hitPlayer(player, bullet, playerNum, special) {
+    bullet.destroy();
+    const damage = special ? 25 : 10;
+    player.health -= damage;
+
+    this.playSound(200, 0.1);
+
+    if (player.health <= 0) {
+      this.endGame(playerNum === 1 ? 2 : 1);
+    }
+  }
+
+  endGame(winner) {
+    this.gameOver = true;
+
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000000, 0.8);
+    overlay.fillRect(0, 0, 800, 600);
+
+    const winText = winner === 1 ? 'PLAYER 1 WINS!' :
+                    (this.numPlayers === 2 ? 'PLAYER 2 WINS!' : 'YOU LOSE!');
+    const color = winner === 1 ? '#0f0' : (this.numPlayers === 2 ? '#09f' : '#f00');
+
+    this.add.text(400, 250, winText, {
+      fontSize: '64px',
+      fontFamily: 'Arial',
+      color: color,
+      stroke: '#000',
+      strokeThickness: 8
+    }).setOrigin(0.5);
+
+    this.add.text(400, 350, 'Press R to return to menu', {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: '#fff'
+    }).setOrigin(0.5);
+
+    this.input.keyboard.once('keydown-R', () => {
+      this.scene.start('MenuScene');
+    });
+
+    this.playSound(300, 0.3);
+  }
+
+  playSound(freq, dur) {
+    const ctx = this.sound.context;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.frequency.value = freq;
+    osc.type = 'square';
+
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + dur);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + dur);
+  }
+}
+
+// GAME CONFIG
 const config = {
   type: Phaser.AUTO,
   width: 800,
   height: 600,
-  backgroundColor: '#000000',
-  scene: {
-    create: create,
-    update: update
-  }
+  backgroundColor: '#0a0a0a',
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { y: 0 },
+      debug: false
+    }
+  },
+  scene: [MenuScene, GameScene]
 };
 
 const game = new Phaser.Game(config);
-
-// Game variables
-let snake = [];
-let snakeSize = 15;
-let direction = { x: 1, y: 0 };
-let nextDirection = { x: 1, y: 0 };
-let food;
-let score = 0;
-let scoreText;
-let titleBlocks = [];
-let gameOver = false;
-let moveTimer = 0;
-let moveDelay = 100;  // Faster initial speed (was 150ms)
-let graphics;
-
-// Pixel font patterns (5x5 grid for each letter)
-const letters = {
-  P: [[1,1,1,1],[1,0,0,1],[1,1,1,1],[1,0,0,0],[1,0,0,0]],
-  L: [[1,0,0,0],[1,0,0,0],[1,0,0,0],[1,0,0,0],[1,1,1,1]],
-  A: [[0,1,1,0],[1,0,0,1],[1,1,1,1],[1,0,0,1],[1,0,0,1]],
-  T: [[1,1,1,1],[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]],
-  N: [[1,0,0,1],[1,1,0,1],[1,0,1,1],[1,0,0,1],[1,0,0,1]],
-  U: [[1,0,0,1],[1,0,0,1],[1,0,0,1],[1,0,0,1],[1,1,1,1]],
-  S: [[0,1,1,1],[1,0,0,0],[0,1,1,0],[0,0,0,1],[1,1,1,0]],
-  H: [[1,0,0,1],[1,0,0,1],[1,1,1,1],[1,0,0,1],[1,0,0,1]],
-  C: [[0,1,1,1],[1,0,0,0],[1,0,0,0],[1,0,0,0],[0,1,1,1]],
-  K: [[1,0,0,1],[1,0,1,0],[1,1,0,0],[1,0,1,0],[1,0,0,1]],
-  '2': [[1,1,1,0],[0,0,0,1],[0,1,1,0],[1,0,0,0],[1,1,1,1]],
-  '5': [[1,1,1,1],[1,0,0,0],[1,1,1,0],[0,0,0,1],[1,1,1,0]],
-  ':': [[0,0,0,0],[0,1,0,0],[0,0,0,0],[0,1,0,0],[0,0,0,0]],
-  R: [[1,1,1,0],[1,0,0,1],[1,1,1,0],[1,0,1,0],[1,0,0,1]],
-  D: [[1,1,1,0],[1,0,0,1],[1,0,0,1],[1,0,0,1],[1,1,1,0]],
-  E: [[1,1,1,1],[1,0,0,0],[1,1,1,0],[1,0,0,0],[1,1,1,1]]
-};
-
-// Bold font for ARCADE (filled/solid style)
-const boldLetters = {
-  A: [[1,1,1,1,1],[1,1,0,1,1],[1,1,1,1,1],[1,1,0,1,1],[1,1,0,1,1]],
-  R: [[1,1,1,1,0],[1,1,0,1,1],[1,1,1,1,0],[1,1,0,1,1],[1,1,0,1,1]],
-  C: [[1,1,1,1,1],[1,1,0,0,0],[1,1,0,0,0],[1,1,0,0,0],[1,1,1,1,1]],
-  D: [[1,1,1,1,0],[1,1,0,1,1],[1,1,0,1,1],[1,1,0,1,1],[1,1,1,1,0]],
-  E: [[1,1,1,1,1],[1,1,0,0,0],[1,1,1,1,0],[1,1,0,0,0],[1,1,1,1,1]]
-};
-
-function create() {
-  const scene = this;
-  graphics = this.add.graphics();
-
-  // Build "PLATANUS HACK ARCADE" in cyan - centered and grid-aligned
-  // PLATANUS: 8 letters × (4 cols + 1 spacing) = 40 blocks, but last letter no spacing = 39 blocks × 15px = 585px
-  let x = Math.floor((800 - 585) / 2 / snakeSize) * snakeSize;
-  let y = Math.floor(180 / snakeSize) * snakeSize;
-  'PLATANUS'.split('').forEach(char => {
-    x = drawLetter(char, x, y, 0x00ffff);
-  });
-
-  // HACK: 4 letters × (4 cols + 1 spacing) = 20 blocks, but last letter no spacing = 19 blocks × 15px = 285px
-  x = Math.floor((800 - 285) / 2 / snakeSize) * snakeSize;
-  y = Math.floor(280 / snakeSize) * snakeSize;
-  'HACK'.split('').forEach(char => {
-    x = drawLetter(char, x, y, 0x00ffff);
-  });
-
-  // ARCADE: 6 letters × (5 cols + 1 spacing) = 36 blocks, but last letter no spacing = 35 blocks × 15px = 525px
-  x = Math.floor((800 - 525) / 2 / snakeSize) * snakeSize;
-  y = Math.floor(380 / snakeSize) * snakeSize;
-  'ARCADE'.split('').forEach(char => {
-    x = drawLetter(char, x, y, 0xff00ff, true);
-  });
-
-  // Score display
-  scoreText = this.add.text(16, 16, 'Score: 0', {
-    fontSize: '24px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#00ff00'
-  });
-
-  // Instructions
-  this.add.text(400, 560, 'Use Joystick to Move | Avoid Walls, Yourself & The Title!', {
-    fontSize: '16px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#888888',
-    align: 'center'
-  }).setOrigin(0.5);
-
-  // Initialize snake (start top left)
-  snake = [
-    { x: 75, y: 60 },
-    { x: 60, y: 60 },
-    { x: 45, y: 60 }
-  ];
-
-  // Spawn initial food
-  spawnFood();
-
-  // Keyboard and Arcade Button input
-  this.input.keyboard.on('keydown', (event) => {
-    // Normalize keyboard input to arcade codes for easier testing
-    const key = KEYBOARD_TO_ARCADE[event.key] || event.key;
-
-    // Restart game (arcade buttons only)
-    if (gameOver && (key === 'P1A' || key === 'START1')) {
-      restartGame(scene);
-      return;
-    }
-
-    // Direction controls (keyboard keys get mapped to arcade codes)
-    if (key === 'P1U' && direction.y === 0) {
-      nextDirection = { x: 0, y: -1 };
-    } else if (key === 'P1D' && direction.y === 0) {
-      nextDirection = { x: 0, y: 1 };
-    } else if (key === 'P1L' && direction.x === 0) {
-      nextDirection = { x: -1, y: 0 };
-    } else if (key === 'P1R' && direction.x === 0) {
-      nextDirection = { x: 1, y: 0 };
-    }
-  });
-
-  playTone(this, 440, 0.1);
-}
-
-function drawLetter(char, startX, startY, color, useBold = false) {
-  const pattern = useBold ? boldLetters[char] : letters[char];
-  if (!pattern) return startX + 30;
-
-  for (let row = 0; row < pattern.length; row++) {
-    for (let col = 0; col < pattern[row].length; col++) {
-      if (pattern[row][col]) {
-        const blockX = startX + col * snakeSize;
-        const blockY = startY + row * snakeSize;
-        titleBlocks.push({ x: blockX, y: blockY, color: color });
-      }
-    }
-  }
-  return startX + (pattern[0].length + 1) * snakeSize;
-}
-
-function update(_time, delta) {
-  if (gameOver) return;
-
-  moveTimer += delta;
-  if (moveTimer >= moveDelay) {
-    moveTimer = 0;
-    direction = nextDirection;
-    moveSnake(this);
-  }
-
-  drawGame();
-}
-
-function moveSnake(scene) {
-  const head = snake[0];
-  const newHead = {
-    x: head.x + direction.x * snakeSize,
-    y: head.y + direction.y * snakeSize
-  };
-
-  // Check wall collision
-  if (newHead.x < 0 || newHead.x >= 800 || newHead.y < 0 || newHead.y >= 600) {
-    endGame(scene);
-    return;
-  }
-
-  // Check self collision
-  for (let segment of snake) {
-    if (segment.x === newHead.x && segment.y === newHead.y) {
-      endGame(scene);
-      return;
-    }
-  }
-
-  // Check title block collision
-  for (let block of titleBlocks) {
-    if (newHead.x === block.x && newHead.y === block.y) {
-      endGame(scene);
-      return;
-    }
-  }
-
-  snake.unshift(newHead);
-
-  // Check food collision
-  if (newHead.x === food.x && newHead.y === food.y) {
-    score += 10;
-    scoreText.setText('Score: ' + score);
-    spawnFood();
-    playTone(scene, 880, 0.1);
-
-    if (moveDelay > 50) {  // Faster max speed (was 80ms)
-      moveDelay -= 2;
-    }
-  } else {
-    snake.pop();
-  }
-}
-
-function spawnFood() {
-  let valid = false;
-  let attempts = 0;
-
-  while (!valid && attempts < 100) {
-    attempts++;
-    const gridX = Math.floor(Math.random() * 53) * snakeSize;
-    const gridY = Math.floor(Math.random() * 40) * snakeSize;
-
-    // Check not on snake
-    let onSnake = false;
-    for (let segment of snake) {
-      if (segment.x === gridX && segment.y === gridY) {
-        onSnake = true;
-        break;
-      }
-    }
-
-    // Check not on title blocks
-    let onTitle = false;
-    for (let block of titleBlocks) {
-      if (gridX === block.x && gridY === block.y) {
-        onTitle = true;
-        break;
-      }
-    }
-
-    if (!onSnake && !onTitle) {
-      food = { x: gridX, y: gridY };
-      valid = true;
-    }
-  }
-}
-
-function drawGame() {
-  graphics.clear();
-
-  // Draw title blocks
-  titleBlocks.forEach(block => {
-    graphics.fillStyle(block.color, 1);
-    graphics.fillRect(block.x, block.y, snakeSize - 2, snakeSize - 2);
-  });
-
-  // Draw snake
-  snake.forEach((segment, index) => {
-    if (index === 0) {
-      graphics.fillStyle(0x00ff00, 1);
-    } else {
-      graphics.fillStyle(0x00aa00, 1);
-    }
-    graphics.fillRect(segment.x, segment.y, snakeSize - 2, snakeSize - 2);
-  });
-
-  // Draw food
-  graphics.fillStyle(0xff0000, 1);
-  graphics.fillRect(food.x, food.y, snakeSize - 2, snakeSize - 2);
-}
-
-function endGame(scene) {
-  gameOver = true;
-  playTone(scene, 220, 0.5);
-
-  // Semi-transparent overlay
-  const overlay = scene.add.graphics();
-  overlay.fillStyle(0x000000, 0.7);
-  overlay.fillRect(0, 0, 800, 600);
-
-  // Game Over title with glow effect
-  const gameOverText = scene.add.text(400, 300, 'GAME OVER', {
-    fontSize: '64px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ff0000',
-    align: 'center',
-    stroke: '#ff6666',
-    strokeThickness: 8
-  }).setOrigin(0.5);
-
-  // Pulsing animation for game over text
-  scene.tweens.add({
-    targets: gameOverText,
-    scale: { from: 1, to: 1.1 },
-    alpha: { from: 1, to: 0.8 },
-    duration: 800,
-    yoyo: true,
-    repeat: -1,
-    ease: 'Sine.easeInOut'
-  });
-
-  // Score display
-  scene.add.text(400, 400, 'SCORE: ' + score, {
-    fontSize: '36px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#00ffff',
-    align: 'center',
-    stroke: '#000000',
-    strokeThickness: 4
-  }).setOrigin(0.5);
-
-  // Restart instruction with subtle animation
-  const restartText = scene.add.text(400, 480, 'Press Button A or START to Restart', {
-    fontSize: '24px',
-    fontFamily: 'Arial, sans-serif',
-    color: '#ffff00',
-    align: 'center',
-    stroke: '#000000',
-    strokeThickness: 3
-  }).setOrigin(0.5);
-
-  // Blinking animation for restart text
-  scene.tweens.add({
-    targets: restartText,
-    alpha: { from: 1, to: 0.3 },
-    duration: 600,
-    yoyo: true,
-    repeat: -1,
-    ease: 'Sine.easeInOut'
-  });
-}
-
-function restartGame(scene) {
-  snake = [
-    { x: 75, y: 60 },
-    { x: 60, y: 60 },
-    { x: 45, y: 60 }
-  ];
-  direction = { x: 1, y: 0 };
-  nextDirection = { x: 1, y: 0 };
-  score = 0;
-  gameOver = false;
-  moveDelay = 100;  // Match new faster initial speed
-  scoreText.setText('Score: 0');
-  spawnFood();
-  scene.scene.restart();
-}
-
-function playTone(scene, frequency, duration) {
-  const audioContext = scene.sound.context;
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
-
-  oscillator.connect(gainNode);
-  gainNode.connect(audioContext.destination);
-
-  oscillator.frequency.value = frequency;
-  oscillator.type = 'square';
-
-  gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-
-  oscillator.start(audioContext.currentTime);
-  oscillator.stop(audioContext.currentTime + duration);
-}
