@@ -106,7 +106,7 @@ export async function checkRestrictions(gameJsPath: string = './game.js'): Promi
       mangle: true
     });
 
-    console.log(gameCode);
+    // console.log(gameCode); // Comentado para no saturar la consola
 
     minifiedCode = minifyResult.code || '';
     minifiedSize = Buffer.byteLength(minifiedCode, 'utf-8');
