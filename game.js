@@ -1,5 +1,24 @@
-// Battle Arena - Top-Down Shooter
-// Choose 1 or 2 players and battle in the arena!
+// Battle Arena - Cooperative Wave Survival
+// Fight endless waves of enemies alone or with a friend!
+
+// ===== DEBUG & DIFFICULTY SETTINGS =====
+const DEBUG_MODE = true;           // Set to true for testing
+const DEBUG_START_WAVE = 10;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
+const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
+const DEBUG_GODMODE = false;        // Set to true for invincibility
+
+const DIFFICULTY = 1;            // Difficulty multiplier
+// Examples:
+// 0.1 = Very Easy (10% enemy health, 10% enemy count, faster shooting)
+// 0.5 = Easy (50% enemy health, 50% enemy count)
+// 1.0 = Normal (default)
+// 2.0 = Hard (200% enemy health, 200% enemy count, slower shooting)
+//
+// DEBUG CONTROLS (when DEBUG_MODE = true):
+// Press 1: Skip to Wave 5 (Bullet Pattern Boss)
+// Press 2: Skip to Wave 10 (Phase Shifter Boss)
+// Press 3: Skip to Wave 20 (Rotating Laser Boss)
+// Press 9: Kill all enemies instantly
 
 // =============================================================================
 // ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
@@ -91,6 +110,12 @@ class MenuScene extends Phaser.Scene {
       strokeThickness: 6
     }).setOrigin(0.5);
 
+    this.add.text(400, 160, 'COOPERATIVE SURVIVAL', {
+      fontSize: '20px',
+      fontFamily: 'Arial',
+      color: '#ffff00'
+    }).setOrigin(0.5);
+
     // 1 Player button
     const btn1 = this.add.rectangle(400, 280, 300, 80, 0x00ff00);
     this.add.text(400, 280, '1 PLAYER', {
@@ -108,7 +133,7 @@ class MenuScene extends Phaser.Scene {
 
     // 2 Players button
     const btn2 = this.add.rectangle(400, 400, 300, 80, 0x0099ff);
-    this.add.text(400, 400, '2 PLAYERS', {
+    this.add.text(400, 400, '2 PLAYERS CO-OP', {
       fontSize: '32px',
       fontFamily: 'Arial',
       color: '#fff'
@@ -130,6 +155,98 @@ class MenuScene extends Phaser.Scene {
   }
 }
 
+// ENEMY TYPE DEFINITIONS
+const ENEMY_TYPES = {
+  triangle: {
+    health: 30,
+    speed: 80,
+    shootDelay: 2000,
+    color: 0xff6600,
+    points: 10,
+    size: 30,
+    rotates: true
+  },
+  square: {
+    health: 50,
+    speed: 60,
+    shootDelay: 3000,
+    color: 0xff00ff,
+    points: 20,
+    size: 30,
+    rotates: false
+  },
+  pentagon: {
+    health: 80,
+    speed: 50,
+    shootDelay: 5000,
+    color: 0x00ffff,
+    points: 50,
+    size: 35,
+    rotates: false
+  }
+};
+
+// BOSS TYPE DEFINITIONS
+const BOSS_TYPES = {
+  pattern: {
+    health: 500,
+    speed: 30,
+    shootDelay: 1500,
+    color: 0xffff00,
+    points: 500,
+    size: 60,
+    wave: 5,
+    name: 'BULLET PATTERN'
+  },
+  phase: {
+    health: 1200,
+    speed: 40,
+    shootDelay: 2000,
+    color: 0xff0088,
+    points: 1000,
+    size: 70,
+    wave: 10,
+    name: 'PHASE SHIFTER'
+  },
+  laser: {
+    health: 2000,
+    speed: 20,
+    shootDelay: 800,
+    color: 0x00ffaa,
+    points: 2000,
+    size: 80,
+    wave: 20,
+    name: 'ROTATING LASER'
+  }
+};
+
+// MAP LAYOUTS
+const MAP_LAYOUTS = [
+  // Map 1 (waves 1-9)
+  [
+    {x: 200, y: 150, w: 60, h: 60},
+    {x: 600, y: 150, w: 60, h: 60},
+    {x: 200, y: 450, w: 60, h: 60},
+    {x: 600, y: 450, w: 60, h: 60},
+    {x: 400, y: 300, w: 80, h: 80}
+  ],
+  // Map 2 (waves 11-19)
+  [
+    {x: 400, y: 150, w: 100, h: 40},
+    {x: 400, y: 450, w: 100, h: 40},
+    {x: 200, y: 300, w: 40, h: 100},
+    {x: 600, y: 300, w: 40, h: 100}
+  ],
+  // Map 3 (waves 21+)
+  [
+    {x: 300, y: 200, w: 80, h: 80},
+    {x: 500, y: 400, w: 80, h: 80},
+    {x: 300, y: 400, w: 50, h: 50},
+    {x: 500, y: 200, w: 50, h: 50},
+    {x: 400, y: 300, w: 60, h: 60}
+  ]
+];
+
 // GAME SCENE
 class GameScene extends Phaser.Scene {
   constructor() {
@@ -138,97 +255,152 @@ class GameScene extends Phaser.Scene {
 
   init(data) {
     this.numPlayers = data.players || 1;
+
+    // Apply debug settings
+    if (DEBUG_MODE && data.wave === undefined) {
+      this.wave = DEBUG_START_WAVE - 1;
+      this.level = DEBUG_START_LEVEL;
+    } else {
+      this.wave = data.wave || 0;
+      this.level = data.level || 1;
+    }
+
+    this.score = data.score || 0;
+    this.gameOver = false;
+    this.currentBoss = null;
+    this.bossActive = false;
+    this.doorsOpen = false;
+    this.transitioning = false;
   }
 
   create() {
-    this.gameOver = false;
-
-    // Graphics object (create once, reuse every frame)
+    // Graphics object
     this.graphics = this.add.graphics();
 
-    // Arena walls (invisible physics bodies) - centered
+    // Arena walls (divididos con espacios para puertas)
     this.walls = this.physics.add.staticGroup();
-    const wallTop = this.walls.create(400, 10, null);
-    wallTop.body.setSize(800, 20);
-    wallTop.setVisible(false);
 
-    const wallBottom = this.walls.create(400, 590, null);
-    wallBottom.body.setSize(800, 20);
-    wallBottom.setVisible(false);
+    // Muro superior: dividido en 2 segmentos (izquierda y derecha de puerta)
+    // Puerta en x: 380-420
+    const wallTopLeft = this.walls.create(190, 10, null); // x: 0-380
+    wallTopLeft.body.setSize(380, 20);
+    wallTopLeft.setVisible(false);
 
-    const wallLeft = this.walls.create(10, 300, null);
-    wallLeft.body.setSize(20, 600);
-    wallLeft.setVisible(false);
+    const wallTopRight = this.walls.create(610, 10, null); // x: 420-800
+    wallTopRight.body.setSize(380, 20);
+    wallTopRight.setVisible(false);
 
-    const wallRight = this.walls.create(790, 300, null);
-    wallRight.body.setSize(20, 600);
-    wallRight.setVisible(false);
+    // Muro inferior: dividido en 2 segmentos
+    const wallBottomLeft = this.walls.create(190, 590, null); // x: 0-380
+    wallBottomLeft.body.setSize(380, 20);
+    wallBottomLeft.setVisible(false);
 
-    // Obstacles (invisible physics bodies) - centered
+    const wallBottomRight = this.walls.create(610, 590, null); // x: 420-800
+    wallBottomRight.body.setSize(380, 20);
+    wallBottomRight.setVisible(false);
+
+    // Muro izquierdo: dividido en 2 segmentos (arriba y abajo de puerta)
+    // Puerta en y: 280-320
+    const wallLeftTop = this.walls.create(10, 140, null); // y: 0-280
+    wallLeftTop.body.setSize(20, 280);
+    wallLeftTop.setVisible(false);
+
+    const wallLeftBottom = this.walls.create(10, 460, null); // y: 320-600
+    wallLeftBottom.body.setSize(20, 280);
+    wallLeftBottom.setVisible(false);
+
+    // Muro derecho: dividido en 2 segmentos
+    const wallRightTop = this.walls.create(790, 140, null); // y: 0-280
+    wallRightTop.body.setSize(20, 280);
+    wallRightTop.setVisible(false);
+
+    const wallRightBottom = this.walls.create(790, 460, null); // y: 320-600
+    wallRightBottom.body.setSize(20, 280);
+    wallRightBottom.setVisible(false);
+
+    // Door zones (sin colisión, solo para detección)
+    this.doorZones = this.physics.add.staticGroup();
+    this.doorTop = this.doorZones.create(400, 10, null);
+    this.doorTop.body.setSize(40, 20);
+    this.doorTop.setVisible(false);
+
+    this.doorBottom = this.doorZones.create(400, 590, null);
+    this.doorBottom.body.setSize(40, 20);
+    this.doorBottom.setVisible(false);
+
+    this.doorLeft = this.doorZones.create(10, 300, null);
+    this.doorLeft.body.setSize(20, 40);
+    this.doorLeft.setVisible(false);
+
+    this.doorRight = this.doorZones.create(790, 300, null);
+    this.doorRight.body.setSize(20, 40);
+    this.doorRight.setVisible(false);
+
+    // Obstacles (loaded dynamically)
     this.obstacles = this.physics.add.staticGroup();
-    const obs1 = this.obstacles.create(200, 150, null);
-    obs1.body.setSize(60, 60);
-    obs1.setVisible(false);
+    this.obstacleData = [];
+    this.loadMap();
 
-    const obs2 = this.obstacles.create(600, 150, null);
-    obs2.body.setSize(60, 60);
-    obs2.setVisible(false);
-
-    const obs3 = this.obstacles.create(200, 450, null);
-    obs3.body.setSize(60, 60);
-    obs3.setVisible(false);
-
-    const obs4 = this.obstacles.create(600, 450, null);
-    obs4.body.setSize(60, 60);
-    obs4.setVisible(false);
-
-    const obs5 = this.obstacles.create(400, 300, null);
-    obs5.body.setSize(80, 80);
-    obs5.setVisible(false);
-
-    // Player 1 (invisible physics body)
-    this.p1 = this.physics.add.sprite(150, 300, null);
+    // Players
+    this.p1 = this.physics.add.sprite(300, 300, null);
     this.p1.setSize(30, 30);
     this.p1.setVisible(false);
     this.p1.health = 100;
     this.p1.speed = 200;
     this.p1.angle = 0;
+    this.p1.specialCooldown = 0;
 
-    // Player 2 (or AI) (invisible physics body)
-    this.p2 = this.physics.add.sprite(650, 300, null);
-    this.p2.setSize(30, 30);
-    this.p2.setVisible(false);
-    this.p2.health = 100;
-    this.p2.speed = 200;
-    this.p2.angle = 180;
+    this.players = [this.p1];
+
+    if (this.numPlayers === 2) {
+      this.p2 = this.physics.add.sprite(500, 300, null);
+      this.p2.setSize(30, 30);
+      this.p2.setVisible(false);
+      this.p2.health = 100;
+      this.p2.speed = 200;
+      this.p2.angle = 0;
+      this.p2.specialCooldown = 0;
+      this.players.push(this.p2);
+    }
 
     // Bullets
-    this.bullets = this.physics.add.group();
-    this.specialBullets = this.physics.add.group();
+    this.playerBullets = this.physics.add.group();
+    this.playerSpecialBullets = this.physics.add.group();
+    this.enemyBullets = this.physics.add.group();
+
+    // Enemies
+    this.enemies = this.physics.add.group();
 
     // Collisions
-    this.physics.add.collider(this.p1, this.walls);
-    this.physics.add.collider(this.p2, this.walls);
-    this.physics.add.collider(this.p1, this.obstacles);
-    this.physics.add.collider(this.p2, this.obstacles);
-    this.physics.add.collider(this.bullets, this.walls, (b) => b.destroy());
-    this.physics.add.collider(this.bullets, this.obstacles, (b) => b.destroy());
-    this.physics.add.collider(this.specialBullets, this.walls, (b) => b.destroy());
-    this.physics.add.collider(this.specialBullets, this.obstacles, (b) => b.destroy());
+    this.players.forEach(p => {
+      this.physics.add.collider(p, this.walls);
+      this.physics.add.collider(p, this.obstacles);
+    });
 
-    // Bullet hits
-    this.physics.add.overlap(this.bullets, this.p1, (p, b) => {
-      if (b.owner !== 1) this.hitPlayer(p, b, 1);
-    });
-    this.physics.add.overlap(this.bullets, this.p2, (p, b) => {
-      if (b.owner !== 2) this.hitPlayer(p, b, 2);
-    });
-    this.physics.add.overlap(this.specialBullets, this.p1, (p, b) => {
-      if (b.owner !== 1) this.hitPlayer(p, b, 1, true);
-    });
-    this.physics.add.overlap(this.specialBullets, this.p2, (p, b) => {
-      if (b.owner !== 2) this.hitPlayer(p, b, 2, true);
-    });
+    this.physics.add.collider(this.playerBullets, this.walls, (b) => b.destroy());
+    this.physics.add.collider(this.playerBullets, this.obstacles, (b) => b.destroy());
+    this.physics.add.collider(this.playerSpecialBullets, this.walls, (b) => b.destroy());
+    this.physics.add.collider(this.playerSpecialBullets, this.obstacles, (b) => b.destroy());
+    this.physics.add.collider(this.enemyBullets, this.walls, (b) => b.destroy());
+    this.physics.add.collider(this.enemyBullets, this.obstacles, (b) => b.destroy());
+    this.physics.add.collider(this.enemies, this.walls);
+    this.physics.add.collider(this.enemies, this.obstacles);
+
+    // Player bullets hit enemies
+    this.physics.add.overlap(this.playerBullets, this.enemies, (b, e) => this.hitEnemy(e, b, 10));
+    this.physics.add.overlap(this.playerSpecialBullets, this.enemies, (b, e) => this.hitEnemy(e, b, 25));
+
+    // Enemy bullets hit players
+    this.physics.add.overlap(this.enemyBullets, this.p1, (p, b) => this.hitPlayer(p, b));
+    if (this.numPlayers === 2) {
+      this.physics.add.overlap(this.enemyBullets, this.p2, (p, b) => this.hitPlayer(p, b));
+    }
+
+    // Door collision detection (overlap, no blocking)
+    this.physics.add.overlap(this.p1, this.doorZones, (p, d) => this.handleDoorOverlap(p, d));
+    if (this.numPlayers === 2) {
+      this.physics.add.overlap(this.p2, this.doorZones, (p, d) => this.handleDoorOverlap(p, d));
+    }
 
     // Controls
     this.keys = this.input.keyboard.addKeys({
@@ -239,33 +411,71 @@ class GameScene extends Phaser.Scene {
       r: 'R'
     });
 
+    // Debug controls
+    if (DEBUG_MODE) {
+      this.input.keyboard.on('keydown-ONE', () => this.debugSkipToWave(5));
+      this.input.keyboard.on('keydown-TWO', () => this.debugSkipToWave(10));
+      this.input.keyboard.on('keydown-THREE', () => this.debugSkipToWave(20));
+      this.input.keyboard.on('keydown-NINE', () => this.debugKillAllEnemies());
+    }
+
     // UI
     this.hpText1 = this.add.text(20, 20, 'P1: 100 HP', {
-      fontSize: '20px',
+      fontSize: '18px',
       fontFamily: 'Arial',
       color: '#0f0'
     });
 
-    this.hpText2 = this.add.text(780, 20, 'P2: 100 HP', {
+    if (this.numPlayers === 2) {
+      this.hpText2 = this.add.text(780, 20, 'P2: 100 HP', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        color: '#09f'
+      }).setOrigin(1, 0);
+    }
+
+    this.waveText = this.add.text(400, 20, 'Wave: 1', {
       fontSize: '20px',
       fontFamily: 'Arial',
-      color: this.numPlayers === 2 ? '#09f' : '#f00'
-    }).setOrigin(1, 0);
+      color: '#ff0'
+    }).setOrigin(0.5, 0);
+
+    this.scoreText = this.add.text(400, 45, 'Score: 0', {
+      fontSize: '16px',
+      fontFamily: 'Arial',
+      color: '#fff'
+    }).setOrigin(0.5, 0);
+
+    // Debug info
+    if (DEBUG_MODE || DEBUG_GODMODE || DIFFICULTY !== 1.0) {
+      let debugText = '';
+      if (DEBUG_MODE) debugText += 'DEBUG MODE | ';
+      if (DEBUG_GODMODE) debugText += 'GODMODE | ';
+      if (DIFFICULTY !== 1.0) debugText += 'Difficulty: ' + DIFFICULTY + 'x';
+
+      this.add.text(400, 580, debugText, {
+        fontSize: '12px',
+        fontFamily: 'Arial',
+        color: '#f0f'
+      }).setOrigin(0.5, 1);
+    }
 
     // Cooldowns
     this.lastShot1 = 0;
-    this.lastSpecial1 = 0;
     this.lastShot2 = 0;
-    this.lastSpecial2 = 0;
 
-    // AI timer
-    this.aiTimer = 0;
+    // Wave system
+    this.spawnTimer = 0;
+    this.spawnDelay = 2000;
+    this.enemiesThisWave = 0;
+    this.enemiesPerWave = 5;
+    this.startNextWave();
   }
 
   update(time, delta) {
     if (this.gameOver) return;
 
-    // Clear and redraw graphics every frame
+    // Clear and redraw
     this.graphics.clear();
 
     // Draw walls
@@ -275,13 +485,18 @@ class GameScene extends Phaser.Scene {
     this.graphics.fillRect(0, 0, 20, 600);
     this.graphics.fillRect(780, 0, 20, 600);
 
-    // Draw obstacles (draw from center to match physics bodies)
+    // Draw doors
+    this.graphics.fillStyle(this.doorsOpen ? 0x00ffff : 0x00ff00);
+    this.graphics.fillRect(380, 0, 40, 20);    // Top
+    this.graphics.fillRect(380, 580, 40, 20);  // Bottom
+    this.graphics.fillRect(0, 280, 20, 40);    // Left
+    this.graphics.fillRect(780, 280, 20, 40);  // Right
+
+    // Draw obstacles
     this.graphics.fillStyle(0x666666);
-    this.graphics.fillRect(200 - 30, 150 - 30, 60, 60);  // centered at 200, 150
-    this.graphics.fillRect(600 - 30, 150 - 30, 60, 60);  // centered at 600, 150
-    this.graphics.fillRect(200 - 30, 450 - 30, 60, 60);  // centered at 200, 450
-    this.graphics.fillRect(600 - 30, 450 - 30, 60, 60);  // centered at 600, 450
-    this.graphics.fillRect(400 - 40, 300 - 40, 80, 80);  // centered at 400, 300
+    this.obstacleData.forEach(obs => {
+      this.graphics.fillRect(obs.x - obs.w/2, obs.y - obs.h/2, obs.w, obs.h);
+    });
 
     // Draw players
     this.graphics.fillStyle(0x00ff00);
@@ -292,117 +507,135 @@ class GameScene extends Phaser.Scene {
       this.p1.x + Math.cos(angle1) * 20,
       this.p1.y + Math.sin(angle1) * 20);
 
-    this.graphics.fillStyle(this.numPlayers === 2 ? 0x0099ff : 0xff0000);
-    this.graphics.fillCircle(this.p2.x, this.p2.y, 15);
-    this.graphics.lineStyle(3, this.numPlayers === 2 ? 0x0099ff : 0xff0000);
-    const angle2 = this.p2.angle * Math.PI / 180;
-    this.graphics.lineBetween(this.p2.x, this.p2.y,
-      this.p2.x + Math.cos(angle2) * 20,
-      this.p2.y + Math.sin(angle2) * 20);
+    // Special cooldown bar P1
+    this.drawCooldownBar(20, 45, this.p1.specialCooldown);
+
+    if (this.numPlayers === 2) {
+      this.graphics.fillStyle(0x0099ff);
+      this.graphics.fillCircle(this.p2.x, this.p2.y, 15);
+      this.graphics.lineStyle(3, 0x0099ff);
+      const angle2 = this.p2.angle * Math.PI / 180;
+      this.graphics.lineBetween(this.p2.x, this.p2.y,
+        this.p2.x + Math.cos(angle2) * 20,
+        this.p2.y + Math.sin(angle2) * 20);
+
+      // Special cooldown bar P2
+      this.drawCooldownBar(680, 45, this.p2.specialCooldown);
+    }
 
     // Draw bullets
-    this.bullets.children.entries.forEach(b => {
+    this.playerBullets.children.entries.forEach(b => {
       this.graphics.fillStyle(b.color);
       this.graphics.fillCircle(b.x, b.y, 4);
     });
 
-    this.specialBullets.children.entries.forEach(b => {
+    this.playerSpecialBullets.children.entries.forEach(b => {
       this.graphics.fillStyle(b.color);
       this.graphics.fillCircle(b.x, b.y, 8);
       this.graphics.lineStyle(2, b.color, 0.5);
       this.graphics.strokeCircle(b.x, b.y, 12);
     });
 
+    this.enemyBullets.children.entries.forEach(b => {
+      this.graphics.fillStyle(0xff0000);
+      this.graphics.fillCircle(b.x, b.y, 5);
+    });
+
+    // Draw enemies
+    this.enemies.children.entries.forEach(e => {
+      if (e.isBoss) this.drawBoss(e);
+      else this.drawEnemy(e);
+    });
+
     // Player 1 movement
-    this.p1.setVelocity(0);
-    let moveX1 = 0, moveY1 = 0;
-    if (this.keys.w.isDown) moveY1 = -1;
-    if (this.keys.s.isDown) moveY1 = 1;
-    if (this.keys.a.isDown) moveX1 = -1;
-    if (this.keys.d.isDown) moveX1 = 1;
+    this.updatePlayer(this.p1, this.keys.w, this.keys.s, this.keys.a, this.keys.d, time, 1, this.keys.q, this.keys.e);
 
-    if (moveX1 !== 0 || moveY1 !== 0) {
-      this.p1.angle = Math.atan2(moveY1, moveX1) * 180 / Math.PI;
-      const len = Math.sqrt(moveX1*moveX1 + moveY1*moveY1);
-      this.p1.setVelocity(moveX1/len * this.p1.speed, moveY1/len * this.p1.speed);
-    }
-
-    // Player 1 shooting
-    if (Phaser.Input.Keyboard.JustDown(this.keys.q) && time - this.lastShot1 > 300) {
-      this.shoot(this.p1, 1, false);
-      this.lastShot1 = time;
-    }
-    if (Phaser.Input.Keyboard.JustDown(this.keys.e) && time - this.lastSpecial1 > 2000) {
-      this.shoot(this.p1, 1, true);
-      this.lastSpecial1 = time;
-    }
-
-    // Player 2 or AI
+    // Player 2 movement
     if (this.numPlayers === 2) {
-      this.p2.setVelocity(0);
-      let moveX2 = 0, moveY2 = 0;
-      if (this.keys.up.isDown) moveY2 = -1;
-      if (this.keys.down.isDown) moveY2 = 1;
-      if (this.keys.left.isDown) moveX2 = -1;
-      if (this.keys.right.isDown) moveX2 = 1;
+      this.updatePlayer(this.p2, this.keys.up, this.keys.down, this.keys.left, this.keys.right, time, 2, this.keys.shoot2, this.keys.special2);
+    }
 
-      if (moveX2 !== 0 || moveY2 !== 0) {
-        this.p2.angle = Math.atan2(moveY2, moveX2) * 180 / Math.PI;
-        const len = Math.sqrt(moveX2*moveX2 + moveY2*moveY2);
-        this.p2.setVelocity(moveX2/len * this.p2.speed, moveY2/len * this.p2.speed);
+    // Update enemies
+    this.enemies.children.entries.forEach(e => {
+      if (e.isBoss) this.updateBoss(e, time, delta);
+      else this.updateEnemy(e, time, delta);
+    });
+
+    // Spawn enemies or boss
+    if (!this.bossActive) {
+      this.spawnTimer += delta;
+      if (this.spawnTimer >= this.spawnDelay && this.enemiesThisWave < this.enemiesPerWave) {
+        this.spawnTimer = 0;
+        this.spawnEnemy();
+        this.enemiesThisWave++;
       }
+    }
 
-      if (Phaser.Input.Keyboard.JustDown(this.keys.shoot2) && time - this.lastShot2 > 300) {
-        this.shoot(this.p2, 2, false);
-        this.lastShot2 = time;
-      }
-      if (Phaser.Input.Keyboard.JustDown(this.keys.special2) && time - this.lastSpecial2 > 2000) {
-        this.shoot(this.p2, 2, true);
-        this.lastSpecial2 = time;
-      }
-    } else {
-      // Simple AI
-      this.aiTimer += delta;
-
-      if (this.aiTimer > 500) {
-        this.aiTimer = 0;
-        const dx = this.p1.x - this.p2.x;
-        const dy = this.p1.y - this.p2.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-
-        this.p2.angle = Math.atan2(dy, dx) * 180 / Math.PI;
-
-        if (dist > 200) {
-          this.p2.setVelocity(dx/dist * this.p2.speed, dy/dist * this.p2.speed);
-        } else if (dist < 150) {
-          this.p2.setVelocity(-dx/dist * this.p2.speed, -dy/dist * this.p2.speed);
-        } else {
-          this.p2.setVelocity(0);
-        }
-
-        if (Math.random() > 0.3 && time - this.lastShot2 > 800) {
-          this.shoot(this.p2, 2, false);
-          this.lastShot2 = time;
-        }
-        if (Math.random() > 0.9 && time - this.lastSpecial2 > 3000) {
-          this.shoot(this.p2, 2, true);
-          this.lastSpecial2 = time;
-        }
-      }
+    // Check wave complete (pero no si las puertas están abiertas esperando transición)
+    if (this.enemiesThisWave >= this.enemiesPerWave && this.enemies.children.size === 0 && !this.bossActive && !this.doorsOpen) {
+      this.startNextWave();
     }
 
     // Update UI
     this.hpText1.setText('P1: ' + Math.max(0, Math.floor(this.p1.health)) + ' HP');
-    this.hpText2.setText('P2: ' + Math.max(0, Math.floor(this.p2.health)) + ' HP');
+    if (this.numPlayers === 2) {
+      this.hpText2.setText('P2: ' + Math.max(0, Math.floor(this.p2.health)) + ' HP');
+    }
+
+    // Update cooldowns
+    if (this.p1.specialCooldown > 0) this.p1.specialCooldown -= delta;
+    if (this.numPlayers === 2 && this.p2.specialCooldown > 0) this.p2.specialCooldown -= delta;
   }
 
-  shoot(player, owner, special) {
+  drawCooldownBar(x, y, cooldown) {
+    const barWidth = 100;
+    const barHeight = 8;
+    const percent = Math.max(0, 1 - (cooldown / 2000));
+
+    this.graphics.fillStyle(0x333333);
+    this.graphics.fillRect(x, y, barWidth, barHeight);
+
+    if (percent > 0) {
+      this.graphics.fillStyle(percent >= 1 ? 0x00ff00 : 0xffaa00);
+      this.graphics.fillRect(x, y, barWidth * percent, barHeight);
+    }
+  }
+
+  updatePlayer(player, upKey, downKey, leftKey, rightKey, time, playerNum, shootKey, specialKey) {
+    player.setVelocity(0);
+    let moveX = 0, moveY = 0;
+    if (upKey.isDown) moveY = -1;
+    if (downKey.isDown) moveY = 1;
+    if (leftKey.isDown) moveX = -1;
+    if (rightKey.isDown) moveX = 1;
+
+    if (moveX !== 0 || moveY !== 0) {
+      player.angle = Math.atan2(moveY, moveX) * 180 / Math.PI;
+      const len = Math.sqrt(moveX*moveX + moveY*moveY);
+      player.setVelocity(moveX/len * player.speed, moveY/len * player.speed);
+    }
+
+    // Shooting
+    const lastShot = playerNum === 1 ? this.lastShot1 : this.lastShot2;
+    if (Phaser.Input.Keyboard.JustDown(shootKey) && time - lastShot > 300) {
+      this.shootPlayer(player, false);
+      if (playerNum === 1) this.lastShot1 = time;
+      else this.lastShot2 = time;
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(specialKey) && player.specialCooldown <= 0) {
+      this.shootPlayer(player, true);
+      player.specialCooldown = 2000;
+    }
+  }
+
+  shootPlayer(player, special) {
     const angle = player.angle * Math.PI / 180;
     const speed = special ? 250 : 400;
-    const group = special ? this.specialBullets : this.bullets;
+    const group = special ? this.playerSpecialBullets : this.playerBullets;
+    const color = player === this.p1 ? 0x00ff00 : 0x0099ff;
 
     if (special) {
-      // Special: 3 bullets in spread
       for (let i = -1; i <= 1; i++) {
         const spreadAngle = angle + i * 0.3;
         const b = group.create(
@@ -412,8 +645,7 @@ class GameScene extends Phaser.Scene {
         b.setSize(16, 16);
         b.setVisible(false);
         b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
-        b.owner = owner;
-        b.color = owner === 1 ? 0x00ff00 : (this.numPlayers === 2 ? 0x0099ff : 0xff0000);
+        b.color = color;
 
         this.time.delayedCall(3000, () => {
           if (b && b.active) b.destroy();
@@ -428,8 +660,7 @@ class GameScene extends Phaser.Scene {
       b.setSize(8, 8);
       b.setVisible(false);
       b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-      b.owner = owner;
-      b.color = owner === 1 ? 0x00ff00 : (this.numPlayers === 2 ? 0x0099ff : 0xff0000);
+      b.color = color;
 
       this.time.delayedCall(2000, () => {
         if (b && b.active) b.destroy();
@@ -438,38 +669,282 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  hitPlayer(player, bullet, playerNum, special) {
-    bullet.destroy();
-    const damage = special ? 25 : 10;
-    player.health -= damage;
+  spawnEnemy() {
+    const side = Phaser.Math.Between(0, 3);
+    let x, y;
 
-    this.playSound(200, 0.1);
+    if (side === 0) { x = 400; y = 30; }          // Top
+    else if (side === 1) { x = 400; y = 570; }    // Bottom
+    else if (side === 2) { x = 30; y = 300; }     // Left
+    else { x = 770; y = 300; }                     // Right
 
-    if (player.health <= 0) {
-      this.endGame(playerNum === 1 ? 2 : 1);
+    // Choose enemy type based on wave
+    let typeName;
+    const rand = Math.random();
+    if (this.wave >= 3 && rand < 0.2) {
+      typeName = 'pentagon';
+    } else if (rand < 0.5) {
+      typeName = 'triangle';
+    } else {
+      typeName = 'square';
+    }
+
+    const typeData = ENEMY_TYPES[typeName];
+    const enemy = this.enemies.create(x, y, null);
+    enemy.setSize(typeData.size, typeData.size);
+    enemy.setVisible(false);
+    enemy.type = typeName;
+    enemy.health = Math.ceil(typeData.health * DIFFICULTY);
+    enemy.speed = typeData.speed;
+    enemy.shootDelay = typeData.shootDelay / DIFFICULTY;
+    enemy.lastShot = 0;
+    enemy.angle = 0;
+    enemy.burstPhase = 0;
+  }
+
+  updateEnemy(enemy, time, delta) {
+    // Move towards nearest player
+    let target = this.p1;
+    if (this.numPlayers === 2) {
+      const d1 = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.p1.x, this.p1.y);
+      const d2 = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.p2.x, this.p2.y);
+      if (d2 < d1) target = this.p2;
+    }
+
+    const dx = target.x - enemy.x;
+    const dy = target.y - enemy.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    // Update angle if enemy rotates
+    const typeData = ENEMY_TYPES[enemy.type];
+    if (typeData.rotates) {
+      enemy.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    }
+
+    if (dist > 150) {
+      enemy.setVelocity(dx/dist * enemy.speed, dy/dist * enemy.speed);
+    } else {
+      enemy.setVelocity(0);
+    }
+
+    // Shoot
+    if (time - enemy.lastShot > enemy.shootDelay) {
+      this.shootEnemy(enemy, target, time);
+      enemy.lastShot = time;
     }
   }
 
-  endGame(winner) {
+  shootEnemy(enemy, target) {
+    const speed = 200;
+
+    if (enemy.type === 'triangle') {
+      // Shoot from one corner
+      const angle = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+      const b = this.enemyBullets.create(
+        enemy.x + Math.cos(angle) * 20,
+        enemy.y + Math.sin(angle) * 20
+      );
+      b.setSize(10, 10);
+      b.setVisible(false);
+      b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+
+      this.time.delayedCall(3000, () => {
+        if (b && b.active) b.destroy();
+      });
+      this.playSound(400, 0.1);
+    } else if (enemy.type === 'square') {
+      // Shoot from 4 corners
+      for (let i = 0; i < 4; i++) {
+        const angle = (i * Math.PI / 2);
+        const b = this.enemyBullets.create(
+          enemy.x + Math.cos(angle) * 20,
+          enemy.y + Math.sin(angle) * 20
+        );
+        b.setSize(10, 10);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+
+        this.time.delayedCall(3000, () => {
+          if (b && b.active) b.destroy();
+        });
+      }
+      this.playSound(400, 0.1);
+    } else if (enemy.type === 'pentagon') {
+      // First burst: 5 bullets from sides (evenly spaced)
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * Math.PI * 2 / 5);
+        const b = this.enemyBullets.create(
+          enemy.x + Math.cos(angle) * 20,
+          enemy.y + Math.sin(angle) * 20
+        );
+        b.setSize(10, 10);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+
+        this.time.delayedCall(3000, () => {
+          if (b && b.active) b.destroy();
+        });
+      }
+      this.playSound(450, 0.12);
+
+      // Second burst: 5 bullets from corners (offset by half angle)
+      this.time.delayedCall(250, () => {
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * Math.PI * 2 / 5) + (Math.PI / 5);
+          const b = this.enemyBullets.create(
+            enemy.x + Math.cos(angle) * 20,
+            enemy.y + Math.sin(angle) * 20
+          );
+          b.setSize(10, 10);
+          b.setVisible(false);
+          b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+
+          this.time.delayedCall(3000, () => {
+            if (b && b.active) b.destroy();
+          });
+        }
+        this.playSound(450, 0.12);
+      });
+    }
+  }
+
+  drawEnemy(enemy) {
+    const typeData = ENEMY_TYPES[enemy.type];
+    this.graphics.fillStyle(typeData.color);
+
+    if (enemy.type === 'triangle') {
+      // Save the graphics state
+      this.graphics.save();
+
+      // Translate to enemy position and rotate
+      this.graphics.translateCanvas(enemy.x, enemy.y);
+      this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
+
+      // Draw triangle pointing right (default direction at 0 degrees)
+      this.graphics.fillTriangle(
+        15, 0,      // Right point (tip)
+        -10, -12,   // Top-left
+        -10, 12     // Bottom-left
+      );
+
+      // Restore graphics state
+      this.graphics.restore();
+    } else if (enemy.type === 'square') {
+      this.graphics.fillRect(enemy.x - 15, enemy.y - 15, 30, 30);
+    } else if (enemy.type === 'pentagon') {
+      // Draw pentagon using 5 vertices
+      const radius = 17;
+      const points = [];
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * Math.PI * 2 / 5) - Math.PI / 2; // Start from top
+        points.push(enemy.x + Math.cos(angle) * radius);
+        points.push(enemy.y + Math.sin(angle) * radius);
+      }
+      this.graphics.fillPoints(points, true);
+    }
+  }
+
+  hitEnemy(enemy, bullet, damage) {
+    bullet.destroy();
+
+    // Handle phase boss splitting
+    if (enemy.isBoss && enemy.bossType === 'phase' && !enemy.hasChildren) {
+      const health = enemy.health;
+      if (health > enemy.maxHealth * 0.66 && health - damage <= enemy.maxHealth * 0.66) {
+        this.splitPhaseBoss(enemy, 'square', 2);
+      } else if (health > enemy.maxHealth * 0.33 && health - damage <= enemy.maxHealth * 0.33) {
+        this.splitPhaseBoss(enemy, 'triangle', 2);
+      }
+    }
+
+    enemy.health -= damage;
+
+    if (enemy.health <= 0) {
+      if (enemy.isBoss) {
+        const typeData = BOSS_TYPES[enemy.bossType];
+        this.score += typeData.points;
+        this.scoreText.setText('Score: ' + this.score);
+        this.bossActive = false;
+        this.doorsOpen = true;
+        this.playSound(600, 0.3);
+
+        // Show message
+        const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
+          fontSize: '32px',
+          fontFamily: 'Arial',
+          color: '#0ff',
+          align: 'center'
+        }).setOrigin(0.5);
+
+        this.time.delayedCall(3000, () => msg.destroy());
+      } else {
+        const typeData = ENEMY_TYPES[enemy.type];
+        this.score += typeData.points;
+        this.scoreText.setText('Score: ' + this.score);
+        this.playSound(500, 0.1);
+      }
+      enemy.destroy();
+    } else {
+      this.playSound(300, 0.05);
+    }
+  }
+
+  hitPlayer(player, bullet) {
+    bullet.destroy();
+
+    if (!DEBUG_GODMODE) {
+      player.health -= 10;
+      this.playSound(200, 0.1);
+
+      if (player.health <= 0) {
+        this.endGame();
+      }
+    }
+  }
+
+  startNextWave() {
+    this.wave++;
+    this.waveText.setText('Wave: ' + this.wave);
+    this.enemiesThisWave = 0;
+    this.spawnDelay = Math.max(800, (2000 - (this.wave - 1) * 100) / DIFFICULTY);
+
+    // Check if this is a boss wave
+    if (this.wave === 5 || this.wave === 10 || this.wave === 20) {
+      this.spawnBoss();
+      this.enemiesPerWave = 1;
+    } else {
+      this.enemiesPerWave = Math.max(1, Math.ceil((5 + (this.wave - 1) * 2) * DIFFICULTY));
+    }
+  }
+
+  endGame() {
     this.gameOver = true;
 
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.8);
     overlay.fillRect(0, 0, 800, 600);
 
-    const winText = winner === 1 ? 'PLAYER 1 WINS!' :
-                    (this.numPlayers === 2 ? 'PLAYER 2 WINS!' : 'YOU LOSE!');
-    const color = winner === 1 ? '#0f0' : (this.numPlayers === 2 ? '#09f' : '#f00');
-
-    this.add.text(400, 250, winText, {
+    this.add.text(400, 200, 'GAME OVER', {
       fontSize: '64px',
       fontFamily: 'Arial',
-      color: color,
+      color: '#f00',
       stroke: '#000',
       strokeThickness: 8
     }).setOrigin(0.5);
 
-    this.add.text(400, 350, 'Press R to return to menu', {
+    this.add.text(400, 280, 'Wave: ' + this.wave, {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#ff0'
+    }).setOrigin(0.5);
+
+    this.add.text(400, 320, 'Score: ' + this.score, {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#fff'
+    }).setOrigin(0.5);
+
+    this.add.text(400, 400, 'Press R to return to menu', {
       fontSize: '24px',
       fontFamily: 'Arial',
       color: '#fff'
@@ -498,6 +973,294 @@ class GameScene extends Phaser.Scene {
 
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + dur);
+  }
+
+  loadMap() {
+    // Clear existing obstacles
+    this.obstacles.clear(true, true);
+    this.obstacleData = [];
+
+    // Get map layout based on level
+    const mapIndex = Math.min(this.level - 1, MAP_LAYOUTS.length - 1);
+    const layout = MAP_LAYOUTS[mapIndex];
+
+    // Create obstacles from layout
+    layout.forEach(obs => {
+      const obstacle = this.obstacles.create(obs.x, obs.y, null);
+      obstacle.body.setSize(obs.w, obs.h);
+      obstacle.setVisible(false);
+      this.obstacleData.push(obs);
+    });
+  }
+
+  spawnBoss() {
+    this.bossActive = true;
+    this.enemiesThisWave = 1;
+
+    // Determine boss type
+    let bossType;
+    if (this.wave === 5) bossType = 'pattern';
+    else if (this.wave === 10) bossType = 'phase';
+    else bossType = 'laser';
+
+    const typeData = BOSS_TYPES[bossType];
+    const boss = this.enemies.create(400, 300, null);
+    boss.setSize(typeData.size, typeData.size);
+    boss.setVisible(false);
+    boss.isBoss = true;
+    boss.bossType = bossType;
+    boss.health = Math.ceil(typeData.health * DIFFICULTY);
+    boss.maxHealth = Math.ceil(typeData.health * DIFFICULTY);
+    boss.speed = typeData.speed;
+    boss.shootDelay = typeData.shootDelay / DIFFICULTY;
+    boss.lastShot = 0;
+    boss.angle = 0;
+    boss.patternIndex = 0;
+    boss.hasChildren = false;
+
+    this.currentBoss = boss;
+
+    // Show boss intro message
+    const msg = this.add.text(400, 250, 'WARNING!\n' + typeData.name, {
+      fontSize: '48px',
+      fontFamily: 'Arial',
+      color: '#f00',
+      align: 'center',
+      stroke: '#000',
+      strokeThickness: 6
+    }).setOrigin(0.5);
+
+    this.time.delayedCall(2000, () => msg.destroy());
+    this.playSound(200, 0.5);
+  }
+
+  updateBoss(boss, time, delta) {
+    if (boss.bossType === 'pattern') {
+      // Slow circular movement
+      const angle = time * 0.0005;
+      const radius = 100;
+      const centerX = 400;
+      const centerY = 300;
+      boss.setVelocity(
+        (Math.cos(angle) * radius - (boss.x - centerX)) * 2,
+        (Math.sin(angle) * radius - (boss.y - centerY)) * 2
+      );
+    } else if (boss.bossType === 'laser') {
+      // Rotate constantly
+      boss.angle += delta * 0.05;
+      // Stay in center
+      boss.setVelocity((400 - boss.x) * 2, (300 - boss.y) * 2);
+    } else if (boss.bossType === 'phase' && !boss.hasChildren) {
+      // Move towards nearest player
+      let target = this.p1;
+      if (this.numPlayers === 2) {
+        const d1 = Phaser.Math.Distance.Between(boss.x, boss.y, this.p1.x, this.p1.y);
+        const d2 = Phaser.Math.Distance.Between(boss.x, boss.y, this.p2.x, this.p2.y);
+        if (d2 < d1) target = this.p2;
+      }
+      const dx = target.x - boss.x;
+      const dy = target.y - boss.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > 100) {
+        boss.setVelocity(dx/dist * boss.speed, dy/dist * boss.speed);
+      } else {
+        boss.setVelocity(0);
+      }
+    }
+
+    // Shoot
+    if (time - boss.lastShot > boss.shootDelay) {
+      this.shootBoss(boss, time);
+      boss.lastShot = time;
+    }
+  }
+
+  shootBoss(boss, time) {
+    const speed = 200;
+
+    if (boss.bossType === 'pattern') {
+      // Cycle through 3 patterns
+      if (boss.patternIndex === 0) {
+        // Spiral pattern
+        for (let i = 0; i < 8; i++) {
+          const angle = (time * 0.002) + (i * Math.PI / 4);
+          const b = this.enemyBullets.create(boss.x, boss.y);
+          b.setSize(10, 10);
+          b.setVisible(false);
+          b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+          this.time.delayedCall(3000, () => { if (b && b.active) b.destroy(); });
+        }
+      } else if (boss.patternIndex === 1) {
+        // Wave pattern (4 directions)
+        for (let dir = 0; dir < 4; dir++) {
+          for (let i = 0; i < 3; i++) {
+            const angle = dir * Math.PI / 2;
+            const spread = (i - 1) * 0.3;
+            const b = this.enemyBullets.create(boss.x, boss.y);
+            b.setSize(10, 10);
+            b.setVisible(false);
+            b.setVelocity(Math.cos(angle + spread) * speed, Math.sin(angle + spread) * speed);
+            this.time.delayedCall(3000, () => { if (b && b.active) b.destroy(); });
+          }
+        }
+      } else {
+        // Circle pattern
+        for (let i = 0; i < 12; i++) {
+          const angle = i * Math.PI * 2 / 12;
+          const b = this.enemyBullets.create(boss.x, boss.y);
+          b.setSize(10, 10);
+          b.setVisible(false);
+          b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+          this.time.delayedCall(3000, () => { if (b && b.active) b.destroy(); });
+        }
+      }
+      boss.patternIndex = (boss.patternIndex + 1) % 3;
+      this.playSound(500, 0.15);
+    } else if (boss.bossType === 'laser') {
+      // Shoot 4 rotating lines
+      for (let i = 0; i < 4; i++) {
+        const angle = (boss.angle + i * 90) * Math.PI / 180;
+        for (let dist = 20; dist < 100; dist += 15) {
+          const b = this.enemyBullets.create(
+            boss.x + Math.cos(angle) * dist,
+            boss.y + Math.sin(angle) * dist
+          );
+          b.setSize(10, 10);
+          b.setVisible(false);
+          b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+          this.time.delayedCall(2000, () => { if (b && b.active) b.destroy(); });
+        }
+      }
+      this.playSound(400, 0.12);
+    } else if (boss.bossType === 'phase') {
+      // Shoot 6 directions
+      for (let i = 0; i < 6; i++) {
+        const angle = i * Math.PI * 2 / 6;
+        const b = this.enemyBullets.create(boss.x, boss.y);
+        b.setSize(10, 10);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        this.time.delayedCall(3000, () => { if (b && b.active) b.destroy(); });
+      }
+      this.playSound(450, 0.12);
+    }
+  }
+
+  drawBoss(boss) {
+    const typeData = BOSS_TYPES[boss.bossType];
+    this.graphics.fillStyle(typeData.color);
+
+    if (boss.bossType === 'pattern') {
+      // Draw star (8 points)
+      const points = [];
+      for (let i = 0; i < 8; i++) {
+        const angle = i * Math.PI / 4 - Math.PI / 2;
+        const radius = i % 2 === 0 ? 30 : 15;
+        points.push(boss.x + Math.cos(angle) * radius);
+        points.push(boss.y + Math.sin(angle) * radius);
+      }
+      this.graphics.fillPoints(points, true);
+    } else if (boss.bossType === 'laser') {
+      // Draw octagon with rotation
+      this.graphics.save();
+      this.graphics.translateCanvas(boss.x, boss.y);
+      this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
+      const points = [];
+      for (let i = 0; i < 8; i++) {
+        const angle = i * Math.PI / 4;
+        points.push(Math.cos(angle) * 40);
+        points.push(Math.sin(angle) * 40);
+      }
+      this.graphics.fillPoints(points, true);
+      this.graphics.restore();
+    } else if (boss.bossType === 'phase' && !boss.hasChildren) {
+      // Draw hexagon
+      const points = [];
+      for (let i = 0; i < 6; i++) {
+        const angle = i * Math.PI / 3 - Math.PI / 2;
+        points.push(boss.x + Math.cos(angle) * 35);
+        points.push(boss.y + Math.sin(angle) * 35);
+      }
+      this.graphics.fillPoints(points, true);
+    }
+
+    // Draw health bar
+    const barW = 100;
+    const barH = 8;
+    const barX = boss.x - barW / 2;
+    const barY = boss.y - 50;
+    const healthPercent = boss.health / boss.maxHealth;
+
+    this.graphics.fillStyle(0x000000);
+    this.graphics.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+    this.graphics.fillStyle(0xff0000);
+    this.graphics.fillRect(barX, barY, barW, barH);
+    this.graphics.fillStyle(0x00ff00);
+    this.graphics.fillRect(barX, barY, barW * healthPercent, barH);
+  }
+
+  splitPhaseBoss(boss, childType, count) {
+    boss.hasChildren = true;
+    const typeData = ENEMY_TYPES[childType];
+
+    for (let i = 0; i < count; i++) {
+      const angle = (i * Math.PI * 2 / count);
+      const enemy = this.enemies.create(
+        boss.x + Math.cos(angle) * 50,
+        boss.y + Math.sin(angle) * 50,
+        null
+      );
+      enemy.setSize(typeData.size, typeData.size);
+      enemy.setVisible(false);
+      enemy.type = childType;
+      enemy.health = typeData.health * 2;
+      enemy.speed = typeData.speed;
+      enemy.shootDelay = typeData.shootDelay;
+      enemy.lastShot = 0;
+      enemy.angle = 0;
+      enemy.isBoss = false;
+    }
+    this.playSound(400, 0.2);
+  }
+
+  handleDoorOverlap(player, door) {
+    if (!this.doorsOpen || this.transitioning) return;
+
+    console.log('¡Jugador tocando puerta! Door:', door.x, door.y, 'Player:', player.x, player.y);
+    this.nextLevel();
+  }
+
+  nextLevel() {
+    if (this.transitioning) return; // Evitar múltiples llamadas
+    this.transitioning = true;
+
+    this.level++;
+    this.doorsOpen = false;
+
+    console.log('Avanzando al nivel:', this.level);
+
+    // Restart scene with new level
+    this.scene.restart({
+      players: this.numPlayers,
+      level: this.level,
+      wave: (this.level - 1) * 10,
+      score: this.score
+    });
+  }
+
+  // Debug functions
+  debugSkipToWave(targetWave) {
+    this.enemies.clear(true, true);
+    this.enemyBullets.clear(true, true);
+    this.wave = targetWave - 1;
+    this.bossActive = false;
+    this.doorsOpen = false;
+    this.startNextWave();
+  }
+
+  debugKillAllEnemies() {
+    this.enemies.clear(true, true);
+    this.bossActive = false;
   }
 }
 
