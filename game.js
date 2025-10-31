@@ -354,6 +354,9 @@ class GameScene extends Phaser.Scene {
     // Graphics object
     this.graphics = this.add.graphics();
 
+    // Iniciar música de fondo
+    this.startBackgroundMusic();
+
     // Arena walls (divididos con espacios para puertas)
     this.walls = this.physics.add.staticGroup();
 
@@ -1180,6 +1183,7 @@ class GameScene extends Phaser.Scene {
     enemy.health = Math.ceil(typeData.health * DIFFICULTY);
     enemy.speed = typeData.speed;
     enemy.shootDelay = typeData.shootDelay / DIFFICULTY;
+    enemy.spawnTime = this.time.now;
     enemy.lastShot = 0;
     enemy.angle = 0;
     enemy.burstPhase = 0;
@@ -1296,7 +1300,8 @@ class GameScene extends Phaser.Scene {
       if (cyclePosition < shootingDuration) {
         // Shooting phase
         const effectiveShootDelay = enemy.shootDelay * shootDelayMultiplier;
-        if (time - enemy.lastShot > effectiveShootDelay) {
+        // Esperar 1 segundo después del spawn antes de disparar
+        if (time - enemy.spawnTime > 1000 && time - enemy.lastShot > effectiveShootDelay) {
           this.shootEnemy(enemy, target, time);
           enemy.lastShot = time;
         }
@@ -1305,7 +1310,8 @@ class GameScene extends Phaser.Scene {
     } else {
       // Normal shooting for other enemies
       const effectiveShootDelay = enemy.shootDelay * shootDelayMultiplier;
-      if (time - enemy.lastShot > effectiveShootDelay) {
+      // Esperar 1 segundo después del spawn antes de disparar
+      if (time - enemy.spawnTime > 1000 && time - enemy.lastShot > effectiveShootDelay) {
         this.shootEnemy(enemy, target, time);
         enemy.lastShot = time;
       }
@@ -1836,6 +1842,105 @@ class GameScene extends Phaser.Scene {
     osc.stop(ctx.currentTime + dur);
   }
 
+  startBackgroundMusic() {
+    if (this.musicPlaying) return;
+    this.musicPlaying = true;
+
+    const ctx = this.sound.context;
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.03; // Volumen bajo para no ser molesto
+    masterGain.connect(ctx.destination);
+
+    // Progresión de acordes: Am - F - C - G (menor melancólica pero intensa)
+    const progression = [
+      [220, 262, 330], // Am (A C E)
+      [175, 220, 262], // F (F A C)
+      [262, 330, 392], // C (C E G)
+      [196, 247, 294]  // G (G B D)
+    ];
+
+    const beatDuration = 0.5; // 120 BPM
+    const loopLength = progression.length * 2 * beatDuration; // 4 acordes, 2 beats cada uno
+
+    const playChord = (chordNotes, startTime, duration) => {
+      chordNotes.forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.connect(gain);
+        gain.connect(masterGain);
+
+        osc.frequency.value = freq;
+        osc.type = 'triangle'; // Sonido más suave
+
+        // Envelope para hacer el sonido más melódico
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      });
+    };
+
+    // Melodía principal (arpegios) - 4 notas por acorde, encaja en el tiempo del acorde
+    const melodyPattern = [0, 2, 1, 2]; // Índices dentro del acorde
+    const playMelody = (chordNotes, startTime, totalDuration) => {
+      melodyPattern.forEach((noteIndex, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.connect(gain);
+        gain.connect(masterGain);
+
+        osc.frequency.value = chordNotes[noteIndex] * 2; // Una octava arriba
+        osc.type = 'square';
+
+        const noteStart = startTime + (i * totalDuration / melodyPattern.length);
+        const noteDuration = totalDuration / melodyPattern.length;
+
+        gain.gain.setValueAtTime(0, noteStart);
+        gain.gain.linearRampToValueAtTime(0.15, noteStart + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.01, noteStart + noteDuration);
+
+        osc.start(noteStart);
+        osc.stop(noteStart + noteDuration);
+      });
+    };
+
+    let nextLoopTime = ctx.currentTime;
+
+    const scheduleMusic = () => {
+      if (!this.musicPlaying) return;
+
+      const currentTime = nextLoopTime;
+
+      progression.forEach((chord, i) => {
+        const chordStart = currentTime + (i * 2 * beatDuration);
+
+        // Tocar acorde (2 beats)
+        playChord(chord, chordStart, beatDuration * 2);
+
+        // Melodía (arpegio rápido durante los 2 beats)
+        playMelody(chord, chordStart, beatDuration * 2);
+      });
+
+      // Programar el siguiente loop exactamente cuando termine este
+      nextLoopTime += loopLength;
+      const delay = (nextLoopTime - ctx.currentTime) * 1000;
+
+      if (delay > 0) {
+        setTimeout(scheduleMusic, delay - 100); // Programar 100ms antes
+      }
+    };
+
+    scheduleMusic();
+  }
+
+  stopBackgroundMusic() {
+    this.musicPlaying = false;
+  }
+
   createExplosionEffect(x, y, color, particleCount = 8) {
     // Crear partículas que explotan hacia afuera
     for (let i = 0; i < particleCount; i++) {
@@ -1918,6 +2023,7 @@ class GameScene extends Phaser.Scene {
     boss.speed = typeData.speed;
     boss.shootDelay = typeData.shootDelay / DIFFICULTY;
     boss.lastShot = 0;
+    boss.spawnTime = this.time.now; // Tiempo cuando apareció
     boss.angle = 0;
     boss.patternIndex = 0;
     boss.hasChildren = false;
@@ -2022,36 +2128,39 @@ class GameScene extends Phaser.Scene {
       if (boss.phaseStartTime === 0) boss.phaseStartTime = time;
       const phaseTime = time - boss.phaseStartTime;
 
-      if (boss.attackPhase === 0) {
-        // Fase espiral: disparar toda la espiral de una vez (2 segundos de duración)
-        if (!boss.spiralFired) {
-          this.shootSpiral(boss, 20, 3, Math.PI, 0, 200, 3000, 100);
-          boss.spiralFired = true;
-        }
-        if (phaseTime >= 2000) {
-          boss.attackPhase = 1;
-          boss.phaseStartTime = time;
-          boss.spiralFired = false;
-        }
-      } else if (boss.attackPhase === 1) {
-        // Pausa 1: 2 segundos
-        if (phaseTime >= 2000) {
-          boss.attackPhase = 2;
-          boss.phaseStartTime = time;
-        }
-      } else if (boss.attackPhase === 2) {
-        // Fase ondas: disparar 2 ondas de balas
-        if (!boss.wave1Fired && phaseTime >= 0) {
-          this.shootWave(boss, 50, 0, 200, 3000, 20);
-          boss.wave1Fired = true;
-        } else if (!boss.wave2Fired && phaseTime >= 500) {
-          this.shootWave(boss, 50, 0, 200, 3000, 20);
-          boss.wave2Fired = true;
-        } else if (phaseTime >= 2000) {
-          boss.attackPhase = 3;
-          boss.phaseStartTime = time;
-          boss.wave1Fired = false;
-          boss.wave2Fired = false;
+      // Esperar 1 segundo después del spawn antes de iniciar ataques
+      if (time - boss.spawnTime > 1000) {
+        if (boss.attackPhase === 0) {
+          // Fase espiral: disparar toda la espiral de una vez (2 segundos de duración)
+          if (!boss.spiralFired) {
+            this.shootSpiral(boss, 20, 3, Math.PI, 0, 200, 3000, 100);
+            boss.spiralFired = true;
+          }
+          if (phaseTime >= 2000) {
+            boss.attackPhase = 1;
+            boss.phaseStartTime = time;
+            boss.spiralFired = false;
+          }
+        } else if (boss.attackPhase === 1) {
+          // Pausa 1: 2 segundos
+          if (phaseTime >= 2000) {
+            boss.attackPhase = 2;
+            boss.phaseStartTime = time;
+          }
+        } else if (boss.attackPhase === 2) {
+          // Fase ondas: disparar 2 ondas de balas
+          if (!boss.wave1Fired && phaseTime >= 0) {
+            this.shootWave(boss, 50, 0, 200, 3000, 20);
+            boss.wave1Fired = true;
+          } else if (!boss.wave2Fired && phaseTime >= 500) {
+            this.shootWave(boss, 50, 0, 200, 3000, 20);
+            boss.wave2Fired = true;
+          } else if (phaseTime >= 2000) {
+            boss.attackPhase = 3;
+            boss.phaseStartTime = time;
+            boss.wave1Fired = false;
+            boss.wave2Fired = false;
+          }
         }
       } else if (boss.attackPhase === 3) {
         // Pausa 2: 2 segundos
@@ -2068,7 +2177,8 @@ class GameScene extends Phaser.Scene {
 
       // Shoot: 4 líneas rotatorias (afectado por frozen)
       const effectiveShootDelay = boss.shootDelay * shootDelayMultiplier;
-      if (time - boss.lastShot > effectiveShootDelay) {
+      // Esperar 1 segundo después del spawn antes de disparar
+      if (time - boss.spawnTime > 1000 && time - boss.lastShot > effectiveShootDelay) {
         this.shootRotatingLines(boss, 4, 7, 100, boss.angle * Math.PI / 180, 200, 2000);
         boss.lastShot = time;
       }
@@ -2092,7 +2202,8 @@ class GameScene extends Phaser.Scene {
 
       // Shoot: onda circular de 6 direcciones desde el borde del boss (afectado por frozen)
       const effectiveShootDelay = boss.shootDelay * shootDelayMultiplier;
-      if (time - boss.lastShot > effectiveShootDelay) {
+      // Esperar 1 segundo después del spawn antes de disparar
+      if (time - boss.spawnTime > 1000 && time - boss.lastShot > effectiveShootDelay) {
         this.shootWave(boss, 6, 0, 200, 3000, 25);
         boss.lastShot = time;
       }
@@ -2129,7 +2240,7 @@ class GameScene extends Phaser.Scene {
       }
 
       // 3. Tercero: 5% chance de CORAZÓN
-      if (Math.random() < 1) {
+      if (Math.random() < 0.05) {
         this.spawnPowerup(position, 'heart');
         return;
       }
@@ -2142,7 +2253,7 @@ class GameScene extends Phaser.Scene {
       }
 
       // Si no salió común: 10% chance de corazón
-      if (Math.random() < 1) {
+      if (Math.random() < 0.1) {
         this.spawnPowerup(position, 'heart');
         return;
       }
@@ -2721,6 +2832,7 @@ class GameScene extends Phaser.Scene {
       enemy.speed = typeData.speed;
       enemy.shootDelay = typeData.shootDelay;
       enemy.lastShot = 0;
+      enemy.spawnTime = this.time.now; // Tiempo cuando apareció
       enemy.angle = 0;
       enemy.isBoss = false;
     }
@@ -2736,7 +2848,6 @@ class GameScene extends Phaser.Scene {
     this.doorWallLeft.body.enable = false;
     this.doorWallRight.body.enable = false;
 
-    console.log('¡Puertas abiertas!');
   }
 
   closeDoors() {
@@ -2752,7 +2863,6 @@ class GameScene extends Phaser.Scene {
   handleDoorOverlap(player, door) {
     if (!this.doorsOpen || this.transitioning) return;
 
-    console.log('¡Jugador tocando puerta! Door:', door.x, door.y, 'Player:', player.x, player.y);
     this.nextLevel();
   }
 
@@ -2787,7 +2897,6 @@ class GameScene extends Phaser.Scene {
     this.level++;
     this.closeDoors();
 
-    console.log('Avanzando al nivel:', this.level, 'Wave actual:', this.wave);
 
     // Efectos de transición de sala
     this.cameras.main.fade(500, 0, 0, 0);
