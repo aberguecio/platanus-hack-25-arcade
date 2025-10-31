@@ -7,7 +7,7 @@ const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
-const DIFFICULTY = 1;            // Difficulty multiplier
+const DIFFICULTY = 0.5;            // Difficulty multiplier
 // Examples:
 // 0.1 = Very Easy (10% enemy health, 10% enemy count, faster shooting)
 // 0.5 = Easy (50% enemy health, 50% enemy count)
@@ -880,61 +880,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // Update homing bullets
-    this.playerBullets.children.entries.forEach(b => {
-      if (b.homingStrength && b.homingStrength > 0 && this.enemies.children.size > 0) {
-        // Find nearest enemy
-        let nearest = null;
-        let minDist = Infinity;
-        this.enemies.children.entries.forEach(e => {
-          const dist = Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y);
-          if (dist < minDist) {
-            minDist = dist;
-            nearest = e;
-          }
-        });
-
-        if (nearest) {
-          // Adjust velocity toward enemy
-          const angle = Math.atan2(nearest.y - b.y, nearest.x - b.x);
-          const currentAngle = Math.atan2(b.body.velocity.y, b.body.velocity.x);
-          const speed = Math.sqrt(b.body.velocity.x ** 2 + b.body.velocity.y ** 2);
-
-          // Blend between current direction and target direction based on homing strength
-          const turnRate = 0.025 * b.homingStrength; // More strength = faster turning (reducido de 0.05 a 0.025)
-          const newAngle = currentAngle + Math.atan2(Math.sin(angle - currentAngle), Math.cos(angle - currentAngle)) * turnRate;
-
-          b.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed);
-        }
-      }
-    });
-
-    this.playerSpecialBullets.children.entries.forEach(b => {
-      if (b.homingStrength && b.homingStrength > 0 && this.enemies.children.size > 0) {
-        // Find nearest enemy
-        let nearest = null;
-        let minDist = Infinity;
-        this.enemies.children.entries.forEach(e => {
-          const dist = Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y);
-          if (dist < minDist) {
-            minDist = dist;
-            nearest = e;
-          }
-        });
-
-        if (nearest) {
-          // Adjust velocity toward enemy
-          const angle = Math.atan2(nearest.y - b.y, nearest.x - b.x);
-          const currentAngle = Math.atan2(b.body.velocity.y, b.body.velocity.x);
-          const speed = Math.sqrt(b.body.velocity.x ** 2 + b.body.velocity.y ** 2);
-
-          // Blend between current direction and target direction based on homing strength
-          const turnRate = 0.025 * b.homingStrength; // More strength = faster turning (reducido de 0.05 a 0.025)
-          const newAngle = currentAngle + Math.atan2(Math.sin(angle - currentAngle), Math.cos(angle - currentAngle)) * turnRate;
-
-          b.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed);
-        }
-      }
-    });
+    this.updateHomingBullets(this.playerBullets);
+    this.updateHomingBullets(this.playerSpecialBullets);
 
     // Update enemies
     this.enemies.children.entries.forEach(e => {
@@ -1038,12 +985,17 @@ class GameScene extends Phaser.Scene {
   }
 
   updatePlayer(player, upKey, downKey, leftKey, rightKey, time, playerNum, shootKey, specialKey) {
-    player.setVelocity(0);
+    // Asegurar que el jugador existe y tiene body
+    if (!player || !player.body) return;
+
+    // Siempre resetear velocidad al inicio
+    player.setVelocity(0, 0);
+
     let moveX = 0, moveY = 0;
-    if (upKey.isDown) moveY = -1;
-    if (downKey.isDown) moveY = 1;
-    if (leftKey.isDown) moveX = -1;
-    if (rightKey.isDown) moveX = 1;
+    if (upKey && upKey.isDown) moveY = -1;
+    if (downKey && downKey.isDown) moveY = 1;
+    if (leftKey && leftKey.isDown) moveX = -1;
+    if (rightKey && rightKey.isDown) moveX = 1;
 
     if (moveX !== 0 || moveY !== 0) {
       player.angle = Math.atan2(moveY, moveX) * 180 / Math.PI;
@@ -1064,6 +1016,52 @@ class GameScene extends Phaser.Scene {
       this.shootPlayer(player, true);
       player.specialCooldown = 2000 + (player.specialCooldownPenalty || 0);
     }
+  }
+
+  // Helper: Calcular lifetime de balas con pierce y bounce
+  getBulletLifetime(player) {
+    return 2000 + (player.pierce * 300) + (player.bounceCount * 300);
+  }
+
+  // Helper: Encontrar jugador más cercano
+  getNearestPlayer(x, y) {
+    if (this.numPlayers === 1) return this.p1;
+    const d1 = Phaser.Math.Distance.Between(x, y, this.p1.x, this.p1.y);
+    const d2 = Phaser.Math.Distance.Between(x, y, this.p2.x, this.p2.y);
+    return d2 < d1 ? this.p2 : this.p1;
+  }
+
+  // Helper: Programar destrucción de bala
+  scheduleBulletDestroy(bullet, lifetime) {
+    this.time.delayedCall(lifetime, () => {
+      if (bullet && bullet.active) bullet.destroy();
+    });
+  }
+
+  // Helper: Actualizar balas con homing
+  updateHomingBullets(bulletGroup) {
+    bulletGroup.children.entries.forEach(b => {
+      if (b.homingStrength && b.homingStrength > 0 && this.enemies.children.size > 0) {
+        let nearest = null;
+        let minDist = Infinity;
+        this.enemies.children.entries.forEach(e => {
+          const dist = Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y);
+          if (dist < minDist) {
+            minDist = dist;
+            nearest = e;
+          }
+        });
+
+        if (nearest) {
+          const angle = Math.atan2(nearest.y - b.y, nearest.x - b.x);
+          const currentAngle = Math.atan2(b.body.velocity.y, b.body.velocity.x);
+          const speed = Math.sqrt(b.body.velocity.x ** 2 + b.body.velocity.y ** 2);
+          const turnRate = 0.025 * b.homingStrength;
+          const newAngle = currentAngle + Math.atan2(Math.sin(angle - currentAngle), Math.cos(angle - currentAngle)) * turnRate;
+          b.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed);
+        }
+      }
+    });
   }
 
   shootPlayer(player, special) {
@@ -1118,14 +1116,7 @@ class GameScene extends Phaser.Scene {
           b.color = color;
         }
 
-        // Distancia base: 2000ms, cada nivel de bounce y pierce agrega 300ms
-        let bulletLifetime = 2000;
-        if (player.pierce) bulletLifetime += 300 * player.pierce; // 300ms por cada nivel de pierce
-        if (player.bounceCount > 0) bulletLifetime += 300 * player.bounceCount; // 300ms por cada nivel de bounce
-
-        this.time.delayedCall(bulletLifetime, () => {
-          if (b && b.active) b.destroy();
-        });
+        this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
       }
 
       // BackShot: dispara una bala hacia atrás con el poder especial
@@ -1155,14 +1146,7 @@ class GameScene extends Phaser.Scene {
           b.color = color;
         }
 
-        // Distancia base: 2000ms, cada nivel de bounce y pierce agrega 300ms
-        let bulletLifetime = 2000;
-        if (player.pierce) bulletLifetime += 300 * player.pierce; // 300ms por cada nivel de pierce
-        if (player.bounceCount > 0) bulletLifetime += 300 * player.bounceCount; // 300ms por cada nivel de bounce
-
-        this.time.delayedCall(bulletLifetime, () => {
-          if (b && b.active) b.destroy();
-        });
+        this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
       }
 
       this.playSound(600, 0.2);
@@ -1194,14 +1178,7 @@ class GameScene extends Phaser.Scene {
         b.homingStrength = player.homingStrength;
         b.owner = player;
 
-        // Distancia base: 2000ms, cada nivel de bounce y pierce agrega 300ms
-        let bulletLifetime = 2000;
-        if (player.pierce) bulletLifetime += 300 * player.pierce; // 300ms por cada nivel de pierce
-        if (player.bounceCount > 0) bulletLifetime += 300 * player.bounceCount; // 300ms por cada nivel de bounce
-
-        this.time.delayedCall(bulletLifetime, () => {
-          if (b && b.active) b.destroy();
-        });
+        this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
       }
       this.playSound(800, 0.08);
       // Pequeño efecto visual al disparar
@@ -1250,7 +1227,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Introducir hexagon desde ronda 12
-    if (this.wave >= 12) {
+    if (this.wave >= 13) {
       weights.hexagon = Math.min(20, 5 + (this.wave - 12) * 2); // 5% en ronda 12, sube hasta 20%
       weights.triangle = Math.max(30, weights.triangle - weights.hexagon / 2);
     }
@@ -1278,7 +1255,6 @@ class GameScene extends Phaser.Scene {
     enemy.spawnTime = this.time.now;
     enemy.lastShot = 0;
     enemy.angle = 0;
-    enemy.burstPhase = 0;
   }
 
   updateEnemy(enemy, time, delta) {
@@ -1348,12 +1324,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Move towards nearest player
-    let target = this.p1;
-    if (this.numPlayers === 2) {
-      const d1 = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.p1.x, this.p1.y);
-      const d2 = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.p2.x, this.p2.y);
-      if (d2 < d1) target = this.p2;
-    }
+    const target = this.getNearestPlayer(enemy.x, enemy.y);
 
     const dx = target.x - enemy.x;
     const dy = target.y - enemy.y;
@@ -2012,7 +1983,7 @@ class GameScene extends Phaser.Scene {
       nextLoopTime += loopLength;
       const delay = (nextLoopTime - ctx.currentTime) * 1000;
 
-      if (delay > 0) {
+      if (delay > 100) {
         setTimeout(scheduleMusic, delay - 100); // Programar 100ms antes
       }
     };
@@ -2255,12 +2226,7 @@ class GameScene extends Phaser.Scene {
       // BOSS 2 (Wave 10): Movimiento lento, siempre apuntando al jugador, ráfagas láser
 
       // Encontrar jugador más cercano
-      let target = this.p1;
-      if (this.numPlayers === 2) {
-        const d1 = Phaser.Math.Distance.Between(boss.x, boss.y, this.p1.x, this.p1.y);
-        const d2 = Phaser.Math.Distance.Between(boss.x, boss.y, this.p2.x, this.p2.y);
-        if (d2 < d1) target = this.p2;
-      }
+      const target = this.getNearestPlayer(boss.x, boss.y);
 
       // Movimiento muy lento hacia el jugador
       const dx = target.x - boss.x;
@@ -2358,12 +2324,7 @@ class GameScene extends Phaser.Scene {
 
   updateTwin(twin, time, speedMultiplier, shootDelayMultiplier) {
     // Encontrar jugador más cercano
-    let target = this.p1;
-    if (this.numPlayers === 2) {
-      const d1 = Phaser.Math.Distance.Between(twin.x, twin.y, this.p1.x, this.p1.y);
-      const d2 = Phaser.Math.Distance.Between(twin.x, twin.y, this.p2.x, this.p2.y);
-      if (d2 < d1) target = this.p2;
-    }
+    const target = this.getNearestPlayer(twin.x, twin.y);
 
     // Repulsión entre mellizos - mantener distancia mínima de 100px
     let repulsionX = 0;
@@ -2464,14 +2425,14 @@ class GameScene extends Phaser.Scene {
         const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot']; //['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets', 'electricBullets'];
     if (!this.damageTakenThisWave) {
       // 1. Primero: 10% chance de powerup RARO
-      if (Math.random() < 0.1) {
+      if (Math.random() < 0.12) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
       }
 
       // 2. Segundo: 15% chance de powerup COMÚN
-      if (Math.random() < 0.15) {
+      if (Math.random() < 0.18) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
@@ -2483,7 +2444,12 @@ class GameScene extends Phaser.Scene {
         return;
       }
     } else {
-      // CON DAÑO: Solo 10% de powerup común
+      // CON DAÑO: 10% de powerup común y 5% raro
+      if (Math.random() < 0.05) {
+        const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
+        this.spawnPowerup(position, randomRare);
+        return;
+      }
       if (Math.random() < 0.10) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
