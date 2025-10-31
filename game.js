@@ -108,7 +108,38 @@ const ENEMY_TYPES = {
     color: 0x00ffff,
     points: 50,
     size: 35,
-    rotates: false
+    rotates: false,
+    minWave: 3 // Aparece desde wave 3
+  },
+  hexagon: {
+    health: 120,
+    speed: 30,
+    shootDelay: 300, // Dispara cada 300ms durante 6 segundos
+    color: 0x00ff88,
+    points: 80,
+    size: 38,
+    rotates: false,
+    minWave: 7
+  },
+  octagon: {
+    health: 150,
+    speed: 55,
+    shootDelay: 3000,
+    color: 0xaa00ff,
+    points: 120,
+    size: 40,
+    rotates: false,
+    minWave: 12
+  },
+  spinner: {
+    health: 180,
+    speed: 50,
+    shootDelay: 500, // Dispara cada 500ms
+    color: 0xff66aa,
+    points: 150,
+    size: 35,
+    rotates: true, // Rota constantemente
+    minWave: 16
   }
 };
 
@@ -143,6 +174,112 @@ const BOSS_TYPES = {
     size: 80,
     wave: 20,
     name: 'ROTATING LASER'
+  }
+};
+
+// POWERUP TYPE DEFINITIONS
+const POWERUP_TYPES = {
+  extraBullet: {
+    name: 'Extra Bullet',
+    rarity: 'common',
+    color: 0xffff00,
+    cooldownPenalty: 500, // Solo afecta a este powerup específico
+    description: '+1 Special Bullet'
+  },
+  speedBoost: {
+    name: 'Speed Boost',
+    rarity: 'common',
+    color: 0x00aaff,
+    cooldownPenalty: 0,
+    description: '+10% Speed'
+  },
+  fireRate: {
+    name: 'Fire Rate Up',
+    rarity: 'common',
+    color: 0xff8800,
+    cooldownPenalty: -100, // Reduce cooldown del disparo normal
+    description: 'Faster Shooting'
+  },
+  shield: {
+    name: 'Shield',
+    rarity: 'common',
+    color: 0x00ffff,
+    cooldownPenalty: 0,
+    description: '1 Free Hit'
+  },
+  pierceShot: {
+    name: 'Pierce Shot',
+    rarity: 'common',
+    color: 0xff00aa,
+    cooldownPenalty: 50,
+    description: 'Bullets Pierce +1'
+  },
+  moreDamage: {
+    name: 'More Damage',
+    rarity: 'common',
+    color: 0xff0000,
+    cooldownPenalty: 50,
+    description: '+25% Damage'
+  },
+  backShot: {
+    name: 'Back Shot',
+    rarity: 'common',
+    color: 0xffaa00,
+    cooldownPenalty: 0,
+    description: 'Shoot Backward on Special'
+  },
+
+  // RAROS (5% sin daño primero, luego común)
+  spreadShot: {
+    name: 'Spread Shot',
+    rarity: 'rare',
+    color: 0xaa00ff,
+    cooldownPenalty: 50,
+    description: '+2 Normal Bullets'
+  },
+  homingBullets: {
+    name: 'Homing Bullets',
+    rarity: 'rare',
+    color: 0xff66ff,
+    cooldownPenalty: 0,
+    description: 'Bullets Home In'
+  },
+  bounce: {
+    name: 'Bounce',
+    rarity: 'rare',
+    color: 0x66ff66,
+    cooldownPenalty: 0,
+    description: 'Bullets Bounce +1'
+  },
+  iceBullets: {
+    name: 'Ice Bullets',
+    rarity: 'rare',
+    color: 0x00ccff,
+    cooldownPenalty: 0,
+    description: 'Freeze Enemies'
+  },
+  fireBullets: {
+    name: 'Fire Bullets',
+    rarity: 'rare',
+    color: 0xff4400,
+    cooldownPenalty: 0,
+    description: 'Burn Enemies'
+  },
+
+  // ESPECIALES
+  heart: {
+    name: 'Heart',
+    rarity: 'special',
+    color: 0xff0066,
+    cooldownPenalty: 0,
+    description: '+1 Heart'
+  },
+  maxHeart: {
+    name: 'Max Heart',
+    rarity: 'rare',
+    color: 0xff00ff,
+    cooldownPenalty: 0,
+    description: 'Max Hearts +1'
   }
 };
 
@@ -294,12 +431,27 @@ class GameScene extends Phaser.Scene {
     this.p1 = this.physics.add.sprite(300, 300, null);
     this.p1.setSize(30, 30);
     this.p1.setVisible(false);
-    this.p1.health = this.p1State ? this.p1State.health : 5; // 5 corazones por defecto
+    this.p1.health = this.p1State ? this.p1State.health : 5;
     this.p1.maxHealth = this.p1State ? this.p1State.maxHealth : 5;
-    this.p1.speed = 200;
+    this.p1.baseSpeed = 200;
+    this.p1.speed = this.p1State ? this.p1State.speed : 200;
     this.p1.angle = 0;
     this.p1.specialCooldown = 0;
+
+    // Powerup stats
     this.p1.specialBullets = this.p1State ? this.p1State.specialBullets : 1;
+    this.p1.specialCooldownPenalty = this.p1State ? this.p1State.specialCooldownPenalty : 0;
+    this.p1.normalShotCooldown = this.p1State ? this.p1State.normalShotCooldown : 300;
+    this.p1.hasShield = this.p1State ? this.p1State.hasShield : false;
+    this.p1.pierce = this.p1State ? this.p1State.pierce : 0;
+    this.p1.damageMultiplier = this.p1State ? this.p1State.damageMultiplier : 1.0;
+    this.p1.spreadBullets = this.p1State ? this.p1State.spreadBullets : 1;
+    this.p1.homingStrength = this.p1State ? this.p1State.homingStrength : 0;
+    this.p1.bounceCount = this.p1State ? this.p1State.bounceCount : 0;
+    this.p1.hasBackShot = this.p1State ? this.p1State.hasBackShot : false;
+    this.p1.iceBulletCount = this.p1State ? this.p1State.iceBulletCount : 0;
+    this.p1.fireBulletCount = this.p1State ? this.p1State.fireBulletCount : 0;
+    this.p1.elementalBulletCounter = 0; // Para rastrear qué bala toca
 
     this.players = [this.p1];
 
@@ -309,10 +461,26 @@ class GameScene extends Phaser.Scene {
       this.p2.setVisible(false);
       this.p2.health = this.p2State ? this.p2State.health : 5;
       this.p2.maxHealth = this.p2State ? this.p2State.maxHealth : 5;
-      this.p2.speed = 200;
+      this.p2.baseSpeed = 200;
+      this.p2.speed = this.p2State ? this.p2State.speed : 200;
       this.p2.angle = 0;
       this.p2.specialCooldown = 0;
+
+      // Powerup stats
       this.p2.specialBullets = this.p2State ? this.p2State.specialBullets : 1;
+      this.p2.specialCooldownPenalty = this.p2State ? this.p2State.specialCooldownPenalty : 0;
+      this.p2.normalShotCooldown = this.p2State ? this.p2State.normalShotCooldown : 300;
+      this.p2.hasShield = this.p2State ? this.p2State.hasShield : false;
+      this.p2.pierce = this.p2State ? this.p2State.pierce : 0;
+      this.p2.damageMultiplier = this.p2State ? this.p2State.damageMultiplier : 1.0;
+      this.p2.spreadBullets = this.p2State ? this.p2State.spreadBullets : 1;
+      this.p2.homingStrength = this.p2State ? this.p2State.homingStrength : 0;
+      this.p2.bounceCount = this.p2State ? this.p2State.bounceCount : 0;
+      this.p2.hasBackShot = this.p2State ? this.p2State.hasBackShot : false;
+      this.p2.iceBulletCount = this.p2State ? this.p2State.iceBulletCount : 0;
+      this.p2.fireBulletCount = this.p2State ? this.p2State.fireBulletCount : 0;
+      this.p2.elementalBulletCounter = 0;
+
       this.players.push(this.p2);
     }
 
@@ -337,12 +505,12 @@ class GameScene extends Phaser.Scene {
       this.physics.add.collider(p, this.obstacles);
     });
 
-    this.physics.add.collider(this.playerBullets, this.walls, (b) => b.destroy());
-    this.physics.add.collider(this.playerBullets, this.doorWalls, (b) => b.destroy());
-    this.physics.add.collider(this.playerBullets, this.obstacles, (b) => b.destroy());
-    this.physics.add.collider(this.playerSpecialBullets, this.walls, (b) => b.destroy());
-    this.physics.add.collider(this.playerSpecialBullets, this.doorWalls, (b) => b.destroy());
-    this.physics.add.collider(this.playerSpecialBullets, this.obstacles, (b) => b.destroy());
+    this.physics.add.collider(this.playerBullets, this.walls, (b, wall) => this.handleBulletWallCollision(b, wall));
+    this.physics.add.collider(this.playerBullets, this.doorWalls, (b, wall) => this.handleBulletWallCollision(b, wall));
+    this.physics.add.collider(this.playerBullets, this.obstacles, (b, wall) => this.handleBulletWallCollision(b, wall));
+    this.physics.add.collider(this.playerSpecialBullets, this.walls, (b, wall) => this.handleBulletWallCollision(b, wall));
+    this.physics.add.collider(this.playerSpecialBullets, this.doorWalls, (b, wall) => this.handleBulletWallCollision(b, wall));
+    this.physics.add.collider(this.playerSpecialBullets, this.obstacles, (b, wall) => this.handleBulletWallCollision(b, wall));
     this.physics.add.collider(this.enemyBullets, this.walls, (b) => b.destroy());
     this.physics.add.collider(this.enemyBullets, this.doorWalls, (b) => b.destroy());
     this.physics.add.collider(this.enemyBullets, this.obstacles, (b) => b.destroy());
@@ -351,8 +519,8 @@ class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.enemies, this.obstacles);
 
     // Player bullets hit enemies
-    this.physics.add.overlap(this.playerBullets, this.enemies, (b, e) => this.hitEnemy(e, b, 10));
-    this.physics.add.overlap(this.playerSpecialBullets, this.enemies, (b, e) => this.hitEnemy(e, b, 25));
+    this.physics.add.overlap(this.playerBullets, this.enemies, (b, e) => this.hitEnemy(e, b));
+    this.physics.add.overlap(this.playerSpecialBullets, this.enemies, (b, e) => this.hitEnemy(e, b));
 
     // Enemy bullets hit players
     this.physics.add.overlap(this.enemyBullets, this.p1, (p, b) => this.hitPlayer(p, b));
@@ -477,6 +645,13 @@ class GameScene extends Phaser.Scene {
       this.p1.x + Math.cos(angle1) * 20,
       this.p1.y + Math.sin(angle1) * 20);
 
+    // Shield visual P1
+    if (this.p1.hasShield) {
+      const pulse = Math.sin(time * 0.01) * 0.3 + 0.7;
+      this.graphics.lineStyle(3, 0x00ffff, pulse);
+      this.graphics.strokeCircle(this.p1.x, this.p1.y, 22);
+    }
+
     // Special cooldown bar P1
     this.drawCooldownBar(20, 45, this.p1.specialCooldown);
 
@@ -488,6 +663,13 @@ class GameScene extends Phaser.Scene {
       this.graphics.lineBetween(this.p2.x, this.p2.y,
         this.p2.x + Math.cos(angle2) * 20,
         this.p2.y + Math.sin(angle2) * 20);
+
+      // Shield visual P2
+      if (this.p2.hasShield) {
+        const pulse = Math.sin(time * 0.01) * 0.3 + 0.7;
+        this.graphics.lineStyle(3, 0x00ffff, pulse);
+        this.graphics.strokeCircle(this.p2.x, this.p2.y, 22);
+      }
 
       // Special cooldown bar P2
       this.drawCooldownBar(680, 45, this.p2.specialCooldown);
@@ -515,6 +697,27 @@ class GameScene extends Phaser.Scene {
     this.enemies.children.entries.forEach(e => {
       if (e.isBoss) this.drawBoss(e);
       else this.drawEnemy(e);
+
+      // Dibujar efectos visuales de estados elementales
+      if (e.isFrozen) {
+        // Efecto visual de hielo (borde azul brillante)
+        this.graphics.lineStyle(3, 0x00ccff, 0.8);
+        this.graphics.strokeCircle(e.x, e.y, 25);
+        this.graphics.lineStyle(1, 0xffffff, 0.6);
+        this.graphics.strokeCircle(e.x, e.y, 28);
+      }
+
+      if (e.isBurning) {
+        // Efecto visual de fuego (partículas rojas/naranjas)
+        const burnPulse = Math.sin(time * 0.02) * 0.3 + 0.7;
+        this.graphics.fillStyle(0xff4400, burnPulse);
+        this.graphics.fillCircle(e.x - 10, e.y - 15, 4);
+        this.graphics.fillCircle(e.x + 8, e.y - 12, 3);
+        this.graphics.fillCircle(e.x, e.y + 12, 5);
+        this.graphics.fillStyle(0xff8800, burnPulse * 0.7);
+        this.graphics.fillCircle(e.x - 5, e.y - 18, 3);
+        this.graphics.fillCircle(e.x + 12, e.y - 8, 4);
+      }
     });
 
     // Draw powerups
@@ -529,6 +732,63 @@ class GameScene extends Phaser.Scene {
     if (this.numPlayers === 2) {
       this.updatePlayer(this.p2, this.keys.up, this.keys.down, this.keys.left, this.keys.right, time, 2, this.keys.shoot2, this.keys.special2);
     }
+
+    // Update homing bullets
+    this.playerBullets.children.entries.forEach(b => {
+      if (b.homingStrength && b.homingStrength > 0 && this.enemies.children.size > 0) {
+        // Find nearest enemy
+        let nearest = null;
+        let minDist = Infinity;
+        this.enemies.children.entries.forEach(e => {
+          const dist = Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y);
+          if (dist < minDist) {
+            minDist = dist;
+            nearest = e;
+          }
+        });
+
+        if (nearest) {
+          // Adjust velocity toward enemy
+          const angle = Math.atan2(nearest.y - b.y, nearest.x - b.x);
+          const currentAngle = Math.atan2(b.body.velocity.y, b.body.velocity.x);
+          const speed = Math.sqrt(b.body.velocity.x ** 2 + b.body.velocity.y ** 2);
+
+          // Blend between current direction and target direction based on homing strength
+          const turnRate = 0.05 * b.homingStrength; // More strength = faster turning
+          const newAngle = currentAngle + Math.atan2(Math.sin(angle - currentAngle), Math.cos(angle - currentAngle)) * turnRate;
+
+          b.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed);
+        }
+      }
+    });
+
+    this.playerSpecialBullets.children.entries.forEach(b => {
+      if (b.homingStrength && b.homingStrength > 0 && this.enemies.children.size > 0) {
+        // Find nearest enemy
+        let nearest = null;
+        let minDist = Infinity;
+        this.enemies.children.entries.forEach(e => {
+          const dist = Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y);
+          if (dist < minDist) {
+            minDist = dist;
+            nearest = e;
+          }
+        });
+
+        if (nearest) {
+          // Adjust velocity toward enemy
+          const angle = Math.atan2(nearest.y - b.y, nearest.x - b.x);
+          const currentAngle = Math.atan2(b.body.velocity.y, b.body.velocity.x);
+          const speed = Math.sqrt(b.body.velocity.x ** 2 + b.body.velocity.y ** 2);
+
+          // Blend between current direction and target direction based on homing strength
+          const turnRate = 0.05 * b.homingStrength; // More strength = faster turning
+          const newAngle = currentAngle + Math.atan2(Math.sin(angle - currentAngle), Math.cos(angle - currentAngle)) * turnRate;
+
+          b.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed);
+        }
+      }
+    });
 
     // Update enemies
     this.enemies.children.entries.forEach(e => {
@@ -595,7 +855,8 @@ class GameScene extends Phaser.Scene {
 
     // Shooting
     const lastShot = playerNum === 1 ? this.lastShot1 : this.lastShot2;
-    if (Phaser.Input.Keyboard.JustDown(shootKey) && time - lastShot > 300) {
+    const shootCooldown = player.normalShotCooldown || 300;
+    if (Phaser.Input.Keyboard.JustDown(shootKey) && time - lastShot > shootCooldown) {
       this.shootPlayer(player, false);
       if (playerNum === 1) this.lastShot1 = time;
       else this.lastShot2 = time;
@@ -603,7 +864,7 @@ class GameScene extends Phaser.Scene {
 
     if (Phaser.Input.Keyboard.JustDown(specialKey) && player.specialCooldown <= 0) {
       this.shootPlayer(player, true);
-      player.specialCooldown = 2000;
+      player.specialCooldown = 2000 + (player.specialCooldownPenalty || 0);
     }
   }
 
@@ -614,9 +875,11 @@ class GameScene extends Phaser.Scene {
     const color = player === this.p1 ? 0x00ff00 : 0x0099ff;
 
     if (special) {
-      // Número de balas especiales (aumenta con powerups)
+      // Balas especiales
       const bulletCount = player.specialBullets || 1;
       const spread = bulletCount > 1 ? 0.3 : 0;
+      const baseDamage = 25;
+      const damage = Math.floor(baseDamage * player.damageMultiplier);
 
       for (let i = 0; i < bulletCount; i++) {
         const offset = (i - (bulletCount - 1) / 2) * spread;
@@ -629,25 +892,92 @@ class GameScene extends Phaser.Scene {
         b.setVisible(false);
         b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
         b.color = color;
+        b.damage = damage;
+        b.pierce = player.pierce;
+        b.bounceCount = player.bounceCount;
+        b.bounces = 0;
+        b.homingStrength = player.homingStrength;
+        b.owner = player;
 
         this.time.delayedCall(3000, () => {
           if (b && b.active) b.destroy();
         });
       }
+
+      // BackShot: dispara una bala hacia atrás con el poder especial
+      if (player.hasBackShot) {
+        const backAngle = angle + Math.PI; // 180 grados opuesto
+        const b = group.create(
+          player.x + Math.cos(backAngle) * 25,
+          player.y + Math.sin(backAngle) * 25
+        );
+        b.setSize(16, 16);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(backAngle) * speed, Math.sin(backAngle) * speed);
+        b.color = color;
+        b.damage = damage;
+        b.pierce = player.pierce;
+        b.bounceCount = player.bounceCount;
+        b.bounces = 0;
+        b.homingStrength = player.homingStrength;
+        b.owner = player;
+
+        this.time.delayedCall(3000, () => {
+          if (b && b.active) b.destroy();
+        });
+      }
+
       this.playSound(600, 0.2);
     } else {
-      const b = group.create(
-        player.x + Math.cos(angle) * 25,
-        player.y + Math.sin(angle) * 25
-      );
-      b.setSize(8, 8);
-      b.setVisible(false);
-      b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-      b.color = color;
+      // Balas normales con spread
+      const bulletCount = player.spreadBullets || 1;
+      const spread = bulletCount > 1 ? 0.25 : 0;
+      const baseDamage = 10;
+      const damage = Math.floor(baseDamage * player.damageMultiplier);
 
-      this.time.delayedCall(2000, () => {
-        if (b && b.active) b.destroy();
-      });
+      for (let i = 0; i < bulletCount; i++) {
+        const offset = (i - (bulletCount - 1) / 2) * spread;
+        const spreadAngle = angle + offset;
+        const b = group.create(
+          player.x + Math.cos(spreadAngle) * 25,
+          player.y + Math.sin(spreadAngle) * 25
+        );
+        b.setSize(8, 8);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
+        b.color = color;
+        b.damage = damage;
+        b.pierce = player.pierce;
+        b.bounceCount = player.bounceCount;
+        b.bounces = 0;
+        b.homingStrength = player.homingStrength;
+        b.owner = player;
+
+        // Sistema elemental: X de cada (5 + total - 1) balas tiene elemento
+        const totalElemental = player.iceBulletCount + player.fireBulletCount;
+        if (totalElemental > 0) {
+          player.elementalBulletCounter++;
+          const denominator = 5 + totalElemental - 1;
+
+          if (player.elementalBulletCounter >= denominator) {
+            player.elementalBulletCounter = 0; // Reset counter
+
+            // Decidir qué elemento aplicar basado en proporción
+            const rand = Math.random() * totalElemental;
+            if (rand < player.iceBulletCount) {
+              b.elementalType = 'ice';
+              b.color = 0x00ccff; // Color azul hielo
+            } else {
+              b.elementalType = 'fire';
+              b.color = 0xff4400; // Color rojo fuego
+            }
+          }
+        }
+
+        this.time.delayedCall(2000, () => {
+          if (b && b.active) b.destroy();
+        });
+      }
       this.playSound(800, 0.08);
     }
   }
@@ -661,16 +991,33 @@ class GameScene extends Phaser.Scene {
     else if (side === 2) { x = 30; y = 300; }     // Left
     else { x = 770; y = 300; }                     // Right
 
-    // Choose enemy type based on wave
+    // Choose enemy type based on wave progression
     let typeName;
-    const rand = Math.random();
-    if (this.wave >= 3 && rand < 0.2) {
-      typeName = 'pentagon';
-    } else if (rand < 0.5) {
-      typeName = 'triangle';
-    } else {
-      typeName = 'square';
+    const availableTypes = ['triangle']; // Always available
+
+    // Wave 3+: Add square and pentagon
+    if (this.wave >= 3) {
+      availableTypes.push('square');
+      availableTypes.push('pentagon');
     }
+
+    // Wave 7+: Add hexagon
+    if (this.wave >= 7) {
+      availableTypes.push('hexagon');
+    }
+
+    // Wave 12+: Add octagon
+    if (this.wave >= 12) {
+      availableTypes.push('octagon');
+    }
+
+    // Wave 16+: Add spinner
+    if (this.wave >= 16) {
+      availableTypes.push('spinner');
+    }
+
+    // Random selection from available types
+    typeName = availableTypes[Math.floor(Math.random() * availableTypes.length)];
 
     const typeData = ENEMY_TYPES[typeName];
     const enemy = this.enemies.create(x, y, null);
@@ -686,6 +1033,59 @@ class GameScene extends Phaser.Scene {
   }
 
   updateEnemy(enemy, time, delta) {
+    // Manejo de estados elementales
+    // Frozen: reducir velocidad y cadencia de disparo
+    let speedMultiplier = 1.0;
+    let shootDelayMultiplier = 1.0;
+
+    if (enemy.isFrozen) {
+      const elapsed = time - enemy.frozenTime;
+      if (elapsed < enemy.frozenDuration) {
+        speedMultiplier = 0.3; // 70% más lento
+        shootDelayMultiplier = 2.0; // Dispara 2x más lento
+      } else {
+        enemy.isFrozen = false; // Termina efecto
+      }
+    }
+
+    // Burning: daño periódico
+    if (enemy.isBurning) {
+      const elapsed = time - enemy.burnStartTime;
+      if (elapsed < enemy.burnDuration) {
+        // Aplicar daño cada 500ms
+        if (time - enemy.burnTickTime > 500) {
+          enemy.health -= 2; // 2 daño por tick
+          enemy.burnTickTime = time;
+          this.playSound(200, 0.03);
+
+          if (enemy.health <= 0) {
+            // Guardar posición antes de destruir
+            const deathPosition = { x: enemy.x, y: enemy.y };
+            this.lastEnemyPosition = deathPosition;
+
+            if (enemy.isBoss) {
+              const typeData = BOSS_TYPES[enemy.bossType];
+              this.score += typeData.points;
+              this.scoreText.setText('Score: ' + this.score);
+              this.bossActive = false;
+              this.openDoors();
+              this.playSound(600, 0.3);
+              this.trySpawnPowerup(true, deathPosition);
+            } else {
+              const typeData = ENEMY_TYPES[enemy.type];
+              this.score += typeData.points;
+              this.scoreText.setText('Score: ' + this.score);
+              this.playSound(500, 0.1);
+            }
+            enemy.destroy();
+            return; // Importante: salir de updateEnemy
+          }
+        }
+      } else {
+        enemy.isBurning = false; // Termina efecto
+      }
+    }
+
     // Move towards nearest player
     let target = this.p1;
     if (this.numPlayers === 2) {
@@ -704,16 +1104,46 @@ class GameScene extends Phaser.Scene {
       enemy.angle = Math.atan2(dy, dx) * 180 / Math.PI;
     }
 
+    // Spinner: constant rotation (reducido si congelado)
+    if (enemy.type === 'spinner') {
+      enemy.angle += 3 * speedMultiplier; // Rotate slower if frozen
+      if (enemy.angle >= 360) enemy.angle -= 360;
+    }
+
     if (dist > 150) {
-      enemy.setVelocity(dx/dist * enemy.speed, dy/dist * enemy.speed);
+      const effectiveSpeed = enemy.speed * speedMultiplier;
+      enemy.setVelocity(dx/dist * effectiveSpeed, dy/dist * effectiveSpeed);
     } else {
       enemy.setVelocity(0);
     }
 
-    // Shoot
-    if (time - enemy.lastShot > enemy.shootDelay) {
-      this.shootEnemy(enemy, target, time);
-      enemy.lastShot = time;
+    // Hexagon: special shooting pattern (6s rapid fire, 2s pause)
+    if (enemy.type === 'hexagon') {
+      if (!enemy.shootingCycle) {
+        enemy.shootingCycle = 0; // Track time in current cycle
+      }
+      enemy.shootingCycle += delta;
+
+      const cycleTime = 8000; // 6s shooting + 2s pause
+      const shootingDuration = 6000;
+      const cyclePosition = enemy.shootingCycle % cycleTime;
+
+      if (cyclePosition < shootingDuration) {
+        // Shooting phase
+        const effectiveShootDelay = enemy.shootDelay * shootDelayMultiplier;
+        if (time - enemy.lastShot > effectiveShootDelay) {
+          this.shootEnemy(enemy, target, time);
+          enemy.lastShot = time;
+        }
+      }
+      // Otherwise, pause phase - don't shoot
+    } else {
+      // Normal shooting for other enemies
+      const effectiveShootDelay = enemy.shootDelay * shootDelayMultiplier;
+      if (time - enemy.lastShot > effectiveShootDelay) {
+        this.shootEnemy(enemy, target, time);
+        enemy.lastShot = time;
+      }
     }
   }
 
@@ -788,6 +1218,77 @@ class GameScene extends Phaser.Scene {
         }
         this.playSound(450, 0.12);
       });
+
+      // Third burst: 5 bullets nuevamente desde los lados (mismo patrón que el primero)
+      this.time.delayedCall(500, () => {
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * Math.PI * 2 / 5);
+          const b = this.enemyBullets.create(
+            enemy.x + Math.cos(angle) * 20,
+            enemy.y + Math.sin(angle) * 20
+          );
+          b.setSize(10, 10);
+          b.setVisible(false);
+          b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+
+          this.time.delayedCall(3000, () => {
+            if (b && b.active) b.destroy();
+          });
+        }
+        this.playSound(450, 0.12);
+      });
+    } else if (enemy.type === 'hexagon') {
+      // Dispara 6 direcciones
+      for (let i = 0; i < 6; i++) {
+        const angle = (i * Math.PI * 2 / 6);
+        const b = this.enemyBullets.create(
+          enemy.x + Math.cos(angle) * 20,
+          enemy.y + Math.sin(angle) * 20
+        );
+        b.setSize(10, 10);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+
+        this.time.delayedCall(3000, () => {
+          if (b && b.active) b.destroy();
+        });
+      }
+      this.playSound(500, 0.1);
+    } else if (enemy.type === 'octagon') {
+      // Dispara 8 direcciones
+      for (let i = 0; i < 8; i++) {
+        const angle = (i * Math.PI * 2 / 8);
+        const b = this.enemyBullets.create(
+          enemy.x + Math.cos(angle) * 20,
+          enemy.y + Math.sin(angle) * 20
+        );
+        b.setSize(10, 10);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+
+        this.time.delayedCall(3000, () => {
+          if (b && b.active) b.destroy();
+        });
+      }
+      this.playSound(550, 0.12);
+    } else if (enemy.type === 'spinner') {
+      // Dispara 2 balas hacia el jugador
+      const angle = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+      for (let i = 0; i < 2; i++) {
+        const offsetAngle = angle + (i === 0 ? -0.1 : 0.1);
+        const b = this.enemyBullets.create(
+          enemy.x + Math.cos(offsetAngle) * 20,
+          enemy.y + Math.sin(offsetAngle) * 20
+        );
+        b.setSize(10, 10);
+        b.setVisible(false);
+        b.setVelocity(Math.cos(offsetAngle) * speed, Math.sin(offsetAngle) * speed);
+
+        this.time.delayedCall(3000, () => {
+          if (b && b.active) b.destroy();
+        });
+      }
+      this.playSound(600, 0.1);
     }
   }
 
@@ -796,26 +1297,14 @@ class GameScene extends Phaser.Scene {
     this.graphics.fillStyle(typeData.color);
 
     if (enemy.type === 'triangle') {
-      // Save the graphics state
       this.graphics.save();
-
-      // Translate to enemy position and rotate
       this.graphics.translateCanvas(enemy.x, enemy.y);
       this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
-
-      // Draw triangle pointing right (default direction at 0 degrees)
-      this.graphics.fillTriangle(
-        15, 0,      // Right point (tip)
-        -10, -12,   // Top-left
-        -10, 12     // Bottom-left
-      );
-
-      // Restore graphics state
+      this.graphics.fillTriangle(15, 0, -10, -12, -10, 12);
       this.graphics.restore();
     } else if (enemy.type === 'square') {
       this.graphics.fillRect(enemy.x - 15, enemy.y - 15, 30, 30);
     } else if (enemy.type === 'pentagon') {
-      // Draw pentagon using 5 vertices
       const radius = 17;
       this.graphics.beginPath();
       for (let i = 0; i < 5; i++) {
@@ -827,11 +1316,133 @@ class GameScene extends Phaser.Scene {
       }
       this.graphics.closePath();
       this.graphics.fillPath();
+    } else if (enemy.type === 'hexagon') {
+      const radius = 19;
+      this.graphics.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = (i * Math.PI * 2 / 6) - Math.PI / 2;
+        const x = enemy.x + Math.cos(angle) * radius;
+        const y = enemy.y + Math.sin(angle) * radius;
+        if (i === 0) this.graphics.moveTo(x, y);
+        else this.graphics.lineTo(x, y);
+      }
+      this.graphics.closePath();
+      this.graphics.fillPath();
+    } else if (enemy.type === 'octagon') {
+      const radius = 20;
+      this.graphics.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const angle = (i * Math.PI * 2 / 8) - Math.PI / 2;
+        const x = enemy.x + Math.cos(angle) * radius;
+        const y = enemy.y + Math.sin(angle) * radius;
+        if (i === 0) this.graphics.moveTo(x, y);
+        else this.graphics.lineTo(x, y);
+      }
+      this.graphics.closePath();
+      this.graphics.fillPath();
+    } else if (enemy.type === 'spinner') {
+      // Dos triángulos rotando
+      this.graphics.save();
+      this.graphics.translateCanvas(enemy.x, enemy.y);
+      this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
+
+      // Triángulo 1 (apuntando hacia arriba)
+      this.graphics.fillTriangle(0, -15, -10, 5, 10, 5);
+
+      // Triángulo 2 (apuntando hacia abajo, rotado 180°)
+      this.graphics.fillTriangle(0, 15, -10, -5, 10, -5);
+
+      this.graphics.restore();
     }
   }
 
-  hitEnemy(enemy, bullet, damage) {
+  handleBulletWallCollision(bullet, wall) {
+    // Check if bullet has bounce capability
+    if (bullet.bounceCount && bullet.bounceCount > 0) {
+      // Track how many times this bullet has bounced
+      if (!bullet.bounces) bullet.bounces = 0;
+
+      if (bullet.bounces < bullet.bounceCount) {
+        bullet.bounces++;
+
+        // Reflect velocity based on wall orientation
+        // Determine if wall is horizontal or vertical based on dimensions
+        const wallWidth = wall.body.width;
+        const wallHeight = wall.body.height;
+
+        // Calculate reflection
+        if (wallWidth > wallHeight) {
+          // Horizontal wall (top/bottom) - reflect Y velocity
+          bullet.body.velocity.y *= -1;
+
+          // Move bullet away from wall to prevent sticking
+          if (bullet.y < wall.y) {
+            bullet.y = wall.y - wall.body.halfHeight - bullet.body.halfHeight - 2;
+          } else {
+            bullet.y = wall.y + wall.body.halfHeight + bullet.body.halfHeight + 2;
+          }
+        } else {
+          // Vertical wall (left/right) - reflect X velocity
+          bullet.body.velocity.x *= -1;
+
+          // Move bullet away from wall to prevent sticking
+          if (bullet.x < wall.x) {
+            bullet.x = wall.x - wall.body.halfWidth - bullet.body.halfWidth - 2;
+          } else {
+            bullet.x = wall.x + wall.body.halfWidth + bullet.body.halfWidth + 2;
+          }
+        }
+
+        // Reset hitEnemies on bounce (permite volver a golpear enemigos después del rebote)
+        if (bullet.hitEnemies) {
+          bullet.hitEnemies.clear();
+        }
+
+        this.playSound(300, 0.05); // Bounce sound
+        return; // Don't destroy
+      }
+    }
+
+    // No bounces left or no bounce capability - destroy
     bullet.destroy();
+  }
+
+  hitEnemy(enemy, bullet) {
+    // Pierce: rastrear enemigos golpeados para evitar hits múltiples
+    if (!bullet.hitEnemies) {
+      bullet.hitEnemies = new Set();
+    }
+
+    // Si esta bala ya golpeó a este enemigo, ignorar
+    if (bullet.hitEnemies.has(enemy)) {
+      return;
+    }
+
+    // Marcar este enemigo como golpeado por esta bala
+    bullet.hitEnemies.add(enemy);
+
+    const damage = bullet.damage || 10;
+
+    // Aplicar efectos elementales
+    if (bullet.elementalType === 'ice') {
+      // Congelar enemigo
+      enemy.isFrozen = true;
+      enemy.frozenTime = this.time.now;
+      enemy.frozenDuration = 3000; // 3 segundos congelado
+    } else if (bullet.elementalType === 'fire') {
+      // Quemar enemigo
+      enemy.isBurning = true;
+      enemy.burnStartTime = this.time.now;
+      enemy.burnDuration = 5000; // 5 segundos quemándose
+      enemy.burnTickTime = this.time.now;
+    }
+
+    // Pierce: solo destruir si ya penetró suficientes enemigos
+    if (bullet.pierce && bullet.pierce > 0) {
+      bullet.pierce--;
+    } else {
+      bullet.destroy();
+    }
 
     // Handle phase boss splitting
     if (enemy.isBoss && enemy.bossType === 'phase' && !enemy.hasChildren) {
@@ -888,6 +1499,13 @@ class GameScene extends Phaser.Scene {
     bullet.destroy();
 
     if (!DEBUG_GODMODE) {
+      // Shield absorbe el golpe
+      if (player.hasShield) {
+        player.hasShield = false;
+        this.playSound(400, 0.2); // Sonido de shield roto
+        return;
+      }
+
       player.health -= 1; // 1 corazón de daño
       this.damageTakenThisWave = true;
       this.playSound(200, 0.1);
@@ -1133,22 +1751,49 @@ class GameScene extends Phaser.Scene {
   // ===== SISTEMA DE POWERUPS =====
 
   trySpawnPowerup(isBoss, position) {
-    let powerupChance;
     if (isBoss) {
-      powerupChance = 1.0; // 100% en boss
-    } else if (this.damageTakenThisWave) {
-      powerupChance = 0.05; // 5% si recibiste daño
-    } else {
-      powerupChance = 0.15; // 15% sin daño
+      // Boss: 50% maxHeart, 50% powerup raro aleatorio
+      const bossDrops = ['maxHeart', 'spreadShot', 'homingBullets', 'bounce', 'iceBullets', 'fireBullets'];
+      const randomDrop = bossDrops[Math.floor(Math.random() * bossDrops.length)];
+      this.spawnPowerup(position, randomDrop);
+      return;
     }
 
-    // Intentar spawner powerup de balas
-    if (Math.random() < powerupChance) {
-      this.spawnPowerup(position, 'extraBullet');
-    } else if (!isBoss) {
-      // Si no salió powerup de balas, 10% chance de corazón
+    // Waves normales: SIN DAÑO primero
+    const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'shield', 'moreDamage', 'backShot'];
+    const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets'];
+    if (!this.damageTakenThisWave) {
+      // 1. Primero: 10% chance de powerup RARO
+      if (Math.random() < 0.10) {
+        const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
+        this.spawnPowerup(position, randomRare);
+        return;
+      }
+
+      // 2. Segundo: 15% chance de powerup COMÚN
+      if (Math.random() < 0.15) {
+        const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
+        this.spawnPowerup(position, randomCommon);
+        return;
+      }
+
+      // 3. Tercero: 10% chance de CORAZÓN
+      if (Math.random() < 0.05) {
+        this.spawnPowerup(position, 'heart');
+        return;
+      }
+    } else {
+      // CON DAÑO: Solo 10% de powerup común
+      if (Math.random() < 0.10) {
+        const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
+        this.spawnPowerup(position, randomCommon);
+        return;
+      }
+
+      // Si no salió común: 10% chance de corazón
       if (Math.random() < 0.10) {
         this.spawnPowerup(position, 'heart');
+        return;
       }
     }
   }
@@ -1169,46 +1814,105 @@ class GameScene extends Phaser.Scene {
   collectPowerup(player, powerup) {
     const type = powerup.type;
     powerup.destroy();
+    this.playSound(800, 0.3);
 
-    if (type === 'extraBullet') {
-      player.specialBullets++;
-      this.playSound(800, 0.3);
+    let message = '';
+    const powerupData = POWERUP_TYPES[type];
+    const color = '#' + powerupData.color.toString(16).padStart(6, '0');
 
-      const msg = this.add.text(400, 350, `POWERUP! Special: ${player.specialBullets} bullets`, {
-        fontSize: '24px',
-        fontFamily: 'Arial',
-        color: '#ffff00'
-      }).setOrigin(0.5);
+    // Aplicar efectos según el tipo
+    switch(type) {
+      case 'extraBullet':
+        player.specialBullets++;
+        player.specialCooldownPenalty += 500; // +500ms solo para extraBullet
+        message = `${powerupData.description} (${player.specialBullets})`;
+        break;
 
-      this.time.delayedCall(2000, () => msg.destroy());
-    } else if (type === 'heart') {
-      // Restaurar 1 corazón, máximo hasta el límite actual
-      if (player.health < player.maxHealth) {
+      case 'speedBoost':
+        player.speed += player.baseSpeed * 0.1; // +10% velocidad
+        message = powerupData.description;
+        break;
+
+      case 'fireRate':
+        player.normalShotCooldown = Math.max(100, player.normalShotCooldown - 100);
+        message = `${powerupData.description} (${player.normalShotCooldown}ms)`;
+        break;
+
+      case 'shield':
+        player.hasShield = true;
+        message = powerupData.description;
+        break;
+
+      case 'pierceShot':
+        player.pierce++;
+        message = `${powerupData.description} (${player.pierce})`;
+        break;
+
+      case 'moreDamage':
+        player.damageMultiplier += 0.25; // +25% daño
+        message = `${powerupData.description} (x${player.damageMultiplier.toFixed(2)})`;
+        break;
+
+      case 'backShot':
+        player.hasBackShot = true;
+        message = powerupData.description;
+        break;
+
+      case 'spreadShot':
+        player.spreadBullets += 2; // +2 balas normales
+        message = `${powerupData.description} (${player.spreadBullets})`;
+        break;
+
+      case 'homingBullets':
+        player.homingStrength = Math.min(1.0, player.homingStrength + 0.2); // Incrementa homing
+        message = `${powerupData.description} (${Math.floor(player.homingStrength * 100)}%)`;
+        break;
+
+      case 'bounce':
+        player.bounceCount++;
+        message = `${powerupData.description} (${player.bounceCount})`;
+        break;
+
+      case 'iceBullets':
+        player.iceBulletCount++;
+        // Calcular probabilidad: X de (5 + total elemental powers - 1)
+        const iceTotal = player.iceBulletCount + player.fireBulletCount;
+        const iceDenom = 5 + iceTotal - 1;
+        message = `${powerupData.description} (${player.iceBulletCount}/${iceDenom})`;
+        break;
+
+      case 'fireBullets':
+        player.fireBulletCount++;
+        // Calcular probabilidad: X de (5 + total elemental powers - 1)
+        const fireTotal = player.iceBulletCount + player.fireBulletCount;
+        const fireDenom = 5 + fireTotal - 1;
+        message = `${powerupData.description} (${player.fireBulletCount}/${fireDenom})`;
+        break;
+
+      case 'heart':
+        if (player.health < player.maxHealth) {
+          player.health++;
+          message = `+1 HEART! (${player.health}/${player.maxHealth})`;
+        } else {
+          message = 'Already at max health!';
+        }
+        break;
+
+      case 'maxHeart':
+        player.maxHealth++;
         player.health++;
-        this.playSound(600, 0.3);
-
-        const msg = this.add.text(400, 350, `+1 HEART! (${player.health}/${player.maxHealth})`, {
-          fontSize: '24px',
-          fontFamily: 'Arial',
-          color: '#ff0066'
-        }).setOrigin(0.5);
-
-        this.time.delayedCall(2000, () => msg.destroy());
-      }
-    } else if (type === 'maxHeart') {
-      // Aumentar máximo de corazones y curar 1
-      player.maxHealth++;
-      player.health++;
-      this.playSound(900, 0.3);
-
-      const msg = this.add.text(400, 350, `MAX HEART UP! (${player.health}/${player.maxHealth})`, {
-        fontSize: '24px',
-        fontFamily: 'Arial',
-        color: '#ff00ff'
-      }).setOrigin(0.5);
-
-      this.time.delayedCall(2000, () => msg.destroy());
+        message = `MAX HEART UP! (${player.health}/${player.maxHealth})`;
+        break;
     }
+
+    // Mostrar mensaje
+    const msg = this.add.text(400, 350, message, {
+      fontSize: '24px',
+      fontFamily: 'Arial',
+      color: color
+    }).setOrigin(0.5);
+
+    this.time.delayedCall(2000, () => msg.destroy());
   }
 
   drawPowerup(powerup) {
@@ -1268,6 +1972,178 @@ class GameScene extends Phaser.Scene {
       this.graphics.save();
       this.graphics.translateCanvas(powerup.x, powerup.y + 2);
       this.graphics.fillCircle(0, 0, 4);
+      this.graphics.restore();
+    } else if (powerup.type === 'speedBoost') {
+      // Flechas hacia adelante (verde lima)
+      this.graphics.fillStyle(0x00ff00, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.fillTriangle(-5, -10, -5, 10, 10, 0);
+      this.graphics.fillTriangle(-15, -10, -15, 10, 0, 0);
+      this.graphics.restore();
+    } else if (powerup.type === 'fireRate') {
+      // Reloj/cronómetro (naranja)
+      this.graphics.fillStyle(0xff8800, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.fillCircle(0, 0, 12);
+      this.graphics.restore();
+
+      this.graphics.lineStyle(3, 0xffffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.lineBetween(0, 0, 0, -8);
+      this.graphics.lineBetween(0, 0, 5, 5);
+      this.graphics.restore();
+    } else if (powerup.type === 'shield') {
+      // Escudo (cian)
+      this.graphics.lineStyle(3, 0x00ffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.strokeCircle(0, 0, 12);
+      this.graphics.strokeCircle(0, 0, 8);
+      this.graphics.restore();
+
+      this.graphics.fillStyle(0x00ffff, pulse * 0.5);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.fillCircle(0, 0, 8);
+      this.graphics.restore();
+    } else if (powerup.type === 'pierceShot') {
+      // Flecha atravesando (púrpura)
+      this.graphics.fillStyle(0xaa00ff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.fillTriangle(10, 0, -5, -8, -5, 8);
+      this.graphics.fillRect(-8, -2, 10, 4);
+      this.graphics.restore();
+
+      this.graphics.lineStyle(2, 0xffffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.lineBetween(-10, -10, 10, 10);
+      this.graphics.restore();
+    } else if (powerup.type === 'moreDamage') {
+      // Estrella de explosión (rojo)
+      this.graphics.fillStyle(0xff0000, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      for (let i = 0; i < 8; i++) {
+        const angle = (i * Math.PI / 4);
+        const x = Math.cos(angle) * 12;
+        const y = Math.sin(angle) * 12;
+        this.graphics.fillCircle(x, y, 3);
+      }
+      this.graphics.fillCircle(0, 0, 6);
+      this.graphics.restore();
+    } else if (powerup.type === 'spreadShot') {
+      // Tres balas en abanico (amarillo brillante)
+      this.graphics.fillStyle(0xffff00, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.fillCircle(0, -8, 5);
+      this.graphics.fillCircle(-7, 4, 5);
+      this.graphics.fillCircle(7, 4, 5);
+      this.graphics.restore();
+
+      this.graphics.lineStyle(2, 0xffffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.lineBetween(0, 0, 0, -12);
+      this.graphics.lineBetween(0, 0, -10, 8);
+      this.graphics.lineBetween(0, 0, 10, 8);
+      this.graphics.restore();
+    } else if (powerup.type === 'homingBullets') {
+      // Espiral de búsqueda (verde brillante)
+      this.graphics.lineStyle(3, 0x00ff88, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+
+      this.graphics.beginPath();
+      for (let i = 0; i < 20; i++) {
+        const angle = (i / 20) * Math.PI * 4;
+        const radius = (i / 20) * 12;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        if (i === 0) this.graphics.moveTo(x, y);
+        else this.graphics.lineTo(x, y);
+      }
+      this.graphics.strokePath();
+      this.graphics.restore();
+
+      this.graphics.fillStyle(0x00ff88, pulse);
+      this.graphics.fillCircle(powerup.x, powerup.y - 12, 4);
+    } else if (powerup.type === 'bounce') {
+      // Zigzag rebotando (azul claro)
+      this.graphics.lineStyle(3, 0x00aaff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.lineBetween(-12, -8, -4, 8);
+      this.graphics.lineBetween(-4, 8, 4, -8);
+      this.graphics.lineBetween(4, -8, 12, 8);
+      this.graphics.restore();
+
+      this.graphics.fillStyle(0xffffff, pulse);
+      this.graphics.fillCircle(powerup.x - 12, powerup.y - 8, 3);
+      this.graphics.fillCircle(powerup.x + 12, powerup.y + 8, 3);
+    } else if (powerup.type === 'backShot') {
+      // Doble flecha (una adelante, una atrás) naranja
+      this.graphics.fillStyle(0xffaa00, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      // Flecha adelante
+      this.graphics.fillTriangle(10, 0, -5, -6, -5, 6);
+      // Flecha atrás
+      this.graphics.fillTriangle(-10, 0, 5, -6, 5, 6);
+      this.graphics.restore();
+
+      this.graphics.lineStyle(2, 0xffffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.strokeCircle(0, 0, 14);
+      this.graphics.restore();
+    } else if (powerup.type === 'iceBullets') {
+      // Cristal de hielo (azul brillante)
+      this.graphics.fillStyle(0x00ccff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+
+      // Forma de diamante/cristal
+      this.graphics.fillTriangle(0, -12, -8, 0, 0, 4);
+      this.graphics.fillTriangle(0, -12, 8, 0, 0, 4);
+      this.graphics.fillTriangle(-8, 0, 0, 12, 0, 4);
+      this.graphics.fillTriangle(8, 0, 0, 12, 0, 4);
+
+      this.graphics.restore();
+
+      this.graphics.lineStyle(2, 0xffffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.strokeCircle(0, 0, 14);
+      this.graphics.restore();
+    } else if (powerup.type === 'fireBullets') {
+      // Llama de fuego (rojo/naranja)
+      this.graphics.fillStyle(0xff4400, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+
+      // Forma de llama
+      this.graphics.fillCircle(0, 2, 10);
+      this.graphics.fillTriangle(-8, 0, 8, 0, 0, -14);
+
+      this.graphics.restore();
+
+      this.graphics.fillStyle(0xff8800, pulse * 0.7);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.fillCircle(0, 2, 6);
+      this.graphics.fillTriangle(-5, 0, 5, 0, 0, -10);
+      this.graphics.restore();
+
+      this.graphics.lineStyle(2, 0xffff00, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.strokeCircle(0, 0, 14);
       this.graphics.restore();
     }
   }
@@ -1480,29 +2356,43 @@ class GameScene extends Phaser.Scene {
     this.nextLevel();
   }
 
+  savePlayerState(player) {
+    // Regenerar shield al cambiar de mapa
+    const regeneratedShield = player.hasShield || player.shield > 0;
+
+    return {
+      health: player.health,
+      maxHealth: player.maxHealth,
+      speed: player.speed,
+      specialBullets: player.specialBullets,
+      specialCooldownPenalty: player.specialCooldownPenalty,
+      normalShotCooldown: player.normalShotCooldown,
+      hasShield: regeneratedShield, // Shield se regenera
+      pierce: player.pierce,
+      damageMultiplier: player.damageMultiplier,
+      spreadBullets: player.spreadBullets,
+      homingStrength: player.homingStrength,
+      bounceCount: player.bounceCount,
+      hasBackShot: player.hasBackShot,
+      iceBulletCount: player.iceBulletCount,
+      fireBulletCount: player.fireBulletCount
+    };
+  }
+
   nextLevel() {
-    if (this.transitioning) return; // Evitar múltiples llamadas
+    if (this.transitioning) return;
     this.transitioning = true;
 
     this.level++;
-    this.closeDoors(); // Cerrar puertas para el nuevo nivel
+    this.closeDoors();
 
     console.log('Avanzando al nivel:', this.level, 'Wave actual:', this.wave);
 
-    // Guardar estado de jugadores
-    const p1State = {
-      health: this.p1.health,
-      maxHealth: this.p1.maxHealth,
-      specialBullets: this.p1.specialBullets
-    };
+    // Guardar estado completo de jugadores
+    const p1State = this.savePlayerState(this.p1);
+    const p2State = this.numPlayers === 2 ? this.savePlayerState(this.p2) : null;
 
-    const p2State = this.numPlayers === 2 ? {
-      health: this.p2.health,
-      maxHealth: this.p2.maxHealth,
-      specialBullets: this.p2.specialBullets
-    } : null;
-
-    // Restart scene with new level, manteniendo el wave actual y estado de jugadores
+    // Restart scene preservando todo
     this.scene.restart({
       players: this.numPlayers,
       level: this.level,
