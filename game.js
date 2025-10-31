@@ -2,8 +2,8 @@
 // Fight endless waves of enemies alone or with a friend!
 
 // ===== DEBUG & DIFFICULTY SETTINGS =====
-const DEBUG_MODE = false;           // Set to true for testing
-const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
+const DEBUG_MODE = true;           // Set to true for testing
+const DEBUG_START_WAVE = 2;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
@@ -948,8 +948,15 @@ class GameScene extends Phaser.Scene {
 
     // Update enemies
     this.enemies.children.entries.forEach(e => {
-      if (e.isBoss) this.updateBoss(e, time, delta);
-      else this.updateEnemy(e, time, delta);
+      if (e.isBoss) {
+        if (e.bossType === 'twin1' || e.bossType === 'twin2') {
+          this.updateTwin(e, time, 1.0, 1.0); // Twins tienen su propio update
+        } else {
+          this.updateBoss(e, time, delta);
+        }
+      } else {
+        this.updateEnemy(e, time, delta);
+      }
     });
 
     // Spawn enemies or boss
@@ -1762,16 +1769,6 @@ class GameScene extends Phaser.Scene {
       bullet.destroy();
     }
 
-    // Handle phase boss splitting
-    if (enemy.isBoss && enemy.bossType === 'phase' && !enemy.hasChildren) {
-      const health = enemy.health;
-      if (health > enemy.maxHealth * 0.66 && health - damage <= enemy.maxHealth * 0.66) {
-        this.splitPhaseBoss(enemy, 'square', 2);
-      } else if (health > enemy.maxHealth * 0.33 && health - damage <= enemy.maxHealth * 0.33) {
-        this.splitPhaseBoss(enemy, 'triangle', 2);
-      }
-    }
-
     enemy.health -= damage;
 
     // Efecto visual al dañar enemigo
@@ -1784,32 +1781,63 @@ class GameScene extends Phaser.Scene {
       this.lastEnemyPosition = deathPosition;
 
       if (enemy.isBoss) {
-        const typeData = BOSS_TYPES[enemy.bossType];
-        this.score += typeData.points;
-        this.scoreText.setText('Score: ' + this.score);
-        this.bossActive = false;
-        this.openDoors();
-        this.playSound(600, 0.3);
-
         // Efectos visuales de muerte de boss (grande)
         this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff00ff, 30);
         this.cameras.main.shake(400, 0.008);
         this.cameras.main.flash(400, 255, 255, 0);
 
-        // Spawn powerup (100% chance on boss)
-        // 50% maxHeart, 50% extraBullet
-        const bossType = Math.random() < 0.5 ? 'maxHeart' : 'extraBullet';
-        this.spawnPowerup(deathPosition, bossType);
+        // Si es twin, verificar si el otro sigue vivo
+        if (enemy.bossType === 'twin1' || enemy.bossType === 'twin2') {
+          // Verificar si el otro twin está vivo
+          const otherTwin = enemy.sibling;
+          if (otherTwin && otherTwin.active && otherTwin.health > 0) {
+            // El otro twin sigue vivo, solo destruir este
+            this.score += 250; // Puntos por cada twin
+            this.scoreText.setText('Score: ' + this.score);
+            this.playSound(600, 0.3);
+          } else {
+            // Ambos twins muertos, terminar pelea de boss
+            this.score += 250; // Puntos por el segundo twin
+            this.scoreText.setText('Score: ' + this.score);
+            this.bossActive = false;
+            this.openDoors();
+            this.playSound(600, 0.3);
 
-        // Show message
-        const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
-          fontSize: '32px',
-          fontFamily: 'Arial',
-          color: '#0ff',
-          align: 'center'
-        }).setOrigin(0.5);
+            // Spawn powerup cuando ambos mueren
+            this.trySpawnPowerup(true, deathPosition);
 
-        this.time.delayedCall(3000, () => msg.destroy());
+            // Show message
+            const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
+              fontSize: '32px',
+              fontFamily: 'Arial',
+              color: '#0ff',
+              align: 'center'
+            }).setOrigin(0.5);
+
+            this.time.delayedCall(3000, () => msg.destroy());
+          }
+        } else {
+          // Boss normal (pattern o laser)
+          const typeData = BOSS_TYPES[enemy.bossType];
+          this.score += typeData.points;
+          this.scoreText.setText('Score: ' + this.score);
+          this.bossActive = false;
+          this.openDoors();
+          this.playSound(600, 0.3);
+
+          // Spawn powerup
+          this.trySpawnPowerup(true, deathPosition);
+
+          // Show message
+          const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
+            fontSize: '32px',
+            fontFamily: 'Arial',
+            color: '#0ff',
+            align: 'center'
+          }).setOrigin(0.5);
+
+          this.time.delayedCall(3000, () => msg.destroy());
+        }
       } else {
         const typeData = ENEMY_TYPES[enemy.type];
         this.score += typeData.points;
@@ -2215,23 +2243,22 @@ class GameScene extends Phaser.Scene {
     }
 
     if (boss.bossType === 'pattern') {
-      // Slow circular movement (afectado por frozen)
+      // BOSS 1 (Wave 5): Movimiento circular, alterna entre espirales y ondas
       const angle = time * 0.0005;
       const radius = 100;
       const centerX = 400;
       const centerY = 300;
-      const baseSpeed = 2 * speedMultiplier; // Aplicar multiplicador de velocidad
+      const baseSpeed = 2 * speedMultiplier;
       boss.setVelocity(
         (Math.cos(angle) * radius - (boss.x - centerX)) * baseSpeed,
         (Math.sin(angle) * radius - (boss.y - centerY)) * baseSpeed
       );
 
-      // Manejar fases del ataque
-      if (boss.phaseStartTime === 0) boss.phaseStartTime = time;
-      const phaseTime = time - boss.phaseStartTime;
-
       // Esperar 1 segundo después del spawn antes de iniciar ataques
       if (time - boss.spawnTime > 1000) {
+        if (boss.phaseStartTime === 0) boss.phaseStartTime = time;
+        const phaseTime = time - boss.phaseStartTime;
+
         if (boss.attackPhase === 0) {
           // Fase espiral: disparar toda la espiral de una vez (2 segundos de duración)
           if (!boss.spiralFired) {
@@ -2263,51 +2290,207 @@ class GameScene extends Phaser.Scene {
             boss.wave1Fired = false;
             boss.wave2Fired = false;
           }
-        }
-      } else if (boss.attackPhase === 3) {
-        // Pausa 2: 2 segundos
-        if (phaseTime >= 2000) {
-          boss.attackPhase = 0;
-          boss.phaseStartTime = time;
+        } else if (boss.attackPhase === 3) {
+          // Pausa 2: 2 segundos
+          if (phaseTime >= 2000) {
+            boss.attackPhase = 0;
+            boss.phaseStartTime = time;
+          }
         }
       }
     } else if (boss.bossType === 'laser') {
-      // Rotate constantly (afectado por frozen)
-      boss.angle += delta * 0.05 * speedMultiplier;
-      // Stay in center
-      boss.setVelocity((400 - boss.x) * 2, (300 - boss.y) * 2);
+      // BOSS 2 (Wave 10): Movimiento lento, siempre apuntando al jugador, ráfagas láser
 
-      // Shoot: 4 líneas rotatorias (afectado por frozen)
-      const effectiveShootDelay = boss.shootDelay * shootDelayMultiplier;
-      // Esperar 1 segundo después del spawn antes de disparar
-      if (time - boss.spawnTime > 1000 && time - boss.lastShot > effectiveShootDelay) {
-        this.shootRotatingLines(boss, 4, 7, 100, boss.angle * Math.PI / 180, 200, 2000);
-        boss.lastShot = time;
-      }
-    } else if (boss.bossType === 'phase' && !boss.hasChildren) {
-      // Move towards nearest player (afectado por frozen)
+      // Encontrar jugador más cercano
       let target = this.p1;
       if (this.numPlayers === 2) {
         const d1 = Phaser.Math.Distance.Between(boss.x, boss.y, this.p1.x, this.p1.y);
         const d2 = Phaser.Math.Distance.Between(boss.x, boss.y, this.p2.x, this.p2.y);
         if (d2 < d1) target = this.p2;
       }
+
+      // Movimiento muy lento hacia el jugador
       const dx = target.x - boss.x;
       const dy = target.y - boss.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
-      if (dist > 100) {
-        const effectiveSpeed = boss.speed * speedMultiplier;
-        boss.setVelocity(dx/dist * effectiveSpeed, dy/dist * effectiveSpeed);
-      } else {
-        boss.setVelocity(0);
+      const slowSpeed = 40 * speedMultiplier; // Muy lento
+      if (dist > 0) {
+        boss.setVelocity(dx/dist * slowSpeed, dy/dist * slowSpeed);
       }
 
-      // Shoot: onda circular de 6 direcciones desde el borde del boss (afectado por frozen)
-      const effectiveShootDelay = boss.shootDelay * shootDelayMultiplier;
-      // Esperar 1 segundo después del spawn antes de disparar
-      if (time - boss.spawnTime > 1000 && time - boss.lastShot > effectiveShootDelay) {
-        this.shootWave(boss, 6, 0, 200, 3000, 25);
-        boss.lastShot = time;
+      // Ángulo siempre apuntando al jugador
+      boss.angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+      // Sistema de ráfagas
+      if (time - boss.spawnTime > 1000) {
+        // Inicializar estado de ráfaga solo la primera vez
+        if (boss.burstActive === undefined) {
+          boss.burstActive = false;
+          boss.nextBurstTime = time;
+        }
+
+        if (!boss.burstActive) {
+          // No está disparando, esperando para siguiente ráfaga
+          if (time >= boss.nextBurstTime) {
+            // Comenzar nueva ráfaga
+            boss.burstActive = true;
+            boss.burstStartTime = time;
+            boss.burstDuration = 1000 + Math.random() * 3000; // 1-4 segundos
+            boss.burstShotInterval = 50; // Disparar cada 50ms (tipo láser rápido)
+            boss.lastBurstShot = time;
+          }
+        } else {
+          // Está en ráfaga activa
+          const burstElapsed = time - boss.burstStartTime;
+
+          if (burstElapsed < boss.burstDuration) {
+            // Disparar en la ráfaga
+            if (time - boss.lastBurstShot > boss.burstShotInterval) {
+              // Disparar bala hacia el jugador
+              const angleToTarget = Math.atan2(target.y - boss.y, target.x - boss.x);
+              this.shootWave(boss, 1, angleToTarget, 250, 2000, 0); // 1 bala rápida
+              boss.lastBurstShot = time;
+            }
+          } else {
+            // Terminar ráfaga, iniciar descanso
+            boss.burstActive = false;
+            boss.nextBurstTime = time + 500 + Math.random() * 2500; // 0.5-3 segundos de descanso
+          }
+        }
+      }
+    } else if (boss.bossType === 'phase' && !boss.hasChildren) {
+      // BOSS 3 (Wave 20): DOS MELLIZOS que alternan ataques
+
+      // Crear mellizos si no existen
+      boss.hasChildren = true;
+
+      // Crear mellizo 1 (ondas hacia el jugador)
+      const twin1 = this.enemies.create(300, 200, null);
+      twin1.setSize(35, 35);
+      twin1.setVisible(false);
+      twin1.isBoss = true;
+      twin1.bossType = 'twin1';
+      twin1.health = Math.ceil(150 * DIFFICULTY);
+      twin1.maxHealth = Math.ceil(150 * DIFFICULTY);
+      twin1.speed = 120; // Más rápido
+      twin1.spawnTime = this.time.now;
+      twin1.lastShot = 0;
+      twin1.phaseStartTime = time;
+      twin1.isAttacking = true; // Twin1 empieza atacando
+
+      // Crear mellizo 2 (espiral)
+      const twin2 = this.enemies.create(500, 400, null);
+      twin2.setSize(35, 35);
+      twin2.setVisible(false);
+      twin2.isBoss = true;
+      twin2.bossType = 'twin2';
+      twin2.health = Math.ceil(150 * DIFFICULTY);
+      twin2.maxHealth = Math.ceil(150 * DIFFICULTY);
+      twin2.speed = 120; // Más rápido
+      twin2.spawnTime = this.time.now;
+      twin2.lastShot = 0;
+      twin2.phaseStartTime = time;
+      twin2.isAttacking = false; // Twin2 empieza esperando
+
+      // Guardar referencias
+      boss.twin1 = twin1;
+      boss.twin2 = twin2;
+      twin1.sibling = twin2;
+      twin2.sibling = twin1;
+
+      // Destruir el boss original (ya no se usa)
+      boss.destroy();
+    }
+  }
+
+  updateTwin(twin, time, speedMultiplier, shootDelayMultiplier) {
+    // Encontrar jugador más cercano
+    let target = this.p1;
+    if (this.numPlayers === 2) {
+      const d1 = Phaser.Math.Distance.Between(twin.x, twin.y, this.p1.x, this.p1.y);
+      const d2 = Phaser.Math.Distance.Between(twin.x, twin.y, this.p2.x, this.p2.y);
+      if (d2 < d1) target = this.p2;
+    }
+
+    // Repulsión entre mellizos - mantener distancia mínima de 100px
+    let repulsionX = 0;
+    let repulsionY = 0;
+    if (twin.sibling && twin.sibling.active) {
+      const siblingDx = twin.sibling.x - twin.x;
+      const siblingDy = twin.sibling.y - twin.y;
+      const siblingDist = Math.sqrt(siblingDx*siblingDx + siblingDy*siblingDy);
+
+      // Si están muy cerca, aplicar fuerza de repulsión
+      if (siblingDist < 100 && siblingDist > 0) {
+        const repulsionStrength = (100 - siblingDist) * 2; // Más cerca = más repulsión
+        repulsionX = -(siblingDx / siblingDist) * repulsionStrength;
+        repulsionY = -(siblingDy / siblingDist) * repulsionStrength;
+      }
+    }
+
+    // Movimiento rápido errático hacia el jugador
+    const dx = target.x - twin.x;
+    const dy = target.y - twin.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const effectiveSpeed = twin.speed * speedMultiplier;
+
+    let velocityX = 0;
+    let velocityY = 0;
+
+    if (dist > 150) {
+      velocityX = (dx/dist * effectiveSpeed);
+      velocityY = (dy/dist * effectiveSpeed);
+    } else if (dist < 100) {
+      velocityX = (-dx/dist * effectiveSpeed);
+      velocityY = (-dy/dist * effectiveSpeed);
+    } else {
+      // Moverse en círculo alrededor del jugador
+      const angle = time * 0.002;
+      velocityX = Math.cos(angle) * effectiveSpeed;
+      velocityY = Math.sin(angle) * effectiveSpeed;
+    }
+
+    // Aplicar velocidad + repulsión
+    twin.setVelocity(velocityX + repulsionX, velocityY + repulsionY);
+
+    // Esperar 1 segundo después del spawn
+    if (time - twin.spawnTime > 1000) {
+      if (twin.phaseStartTime === 0) twin.phaseStartTime = time;
+      const phaseTime = time - twin.phaseStartTime;
+
+      if (twin.isAttacking) {
+        // Atacando durante 5 segundos
+        if (twin.bossType === 'twin1') {
+          // Twin 1: ondas hacia el jugador (10 balas)
+          if (time - twin.lastShot > 300 * shootDelayMultiplier) {
+            const angleToTarget = Math.atan2(target.y - twin.y, target.x - twin.x);
+            this.shootWave(twin, 10, angleToTarget, 200, 3000, 0);
+            twin.lastShot = time;
+          }
+        } else {
+          // Twin 2: espiral - disparar solo una vez al inicio del ataque
+          if (!twin.spiralFired) {
+            // Espiral más larga: 50 balas, 4 brazos, rotación completa de 2*PI, delay 100ms
+            this.shootSpiral(twin, 50, 4, Math.PI * 2, 0, 400, 3000, 100);
+            twin.spiralFired = true;
+          }
+        }
+
+        if (phaseTime >= 5000) {
+          // Terminar ataque, cambiar turno
+          twin.isAttacking = false;
+          twin.spiralFired = false;
+          twin.phaseStartTime = time;
+          if (twin.sibling && twin.sibling.active) {
+            twin.sibling.isAttacking = true;
+            twin.sibling.phaseStartTime = time;
+          }
+        }
+      } else {
+        // No atacando, esperando 5 segundos
+        if (phaseTime >= 5000) {
+          // No hace nada, espera que el hermano termine
+        }
       }
     }
   }
@@ -2762,14 +2945,6 @@ class GameScene extends Phaser.Scene {
   }
 
   // ===== SISTEMA MODULAR DE DISPAROS DE BOSSES =====
-  // Este sistema permite crear patrones de disparo reutilizables.
-  // Cada función maneja todo el patrón completo, solo llama UNA VEZ por ataque.
-  //
-  // Ejemplos de uso:
-  // - Espiral 2 brazos, 20 balas: shootSpiral(boss, 20, 2, Math.PI, 0, 200, 3000, 100)
-  // - Onda circular 50 balas: shootWave(boss, 50, 0, 200, 3000, 20)
-  // - Onda con delay: shootWaveDelayed(boss, 12, 0, 200, 2000, 50)
-  // - Líneas rotatorias: shootRotatingLines(boss, 4, 7, 100, angle, 200, 2000)
 
   // Función genérica para crear una bala desde una posición y ángulo
   shootBossBullet(x, y, angle, speed, lifetime, playSound = true) {
@@ -2800,35 +2975,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // Patrón: Onda circular con delay entre balas (más visual)
-  // bulletCount: número de balas en el círculo
-  // angleOffset: ángulo inicial de rotación (en radianes)
-  // delayBetween: milisegundos entre cada bala
-  shootWaveDelayed(source, bulletCount, angleOffset, speed, lifetime, delayBetween = 50) {
-    for (let i = 0; i < bulletCount; i++) {
-      this.time.delayedCall(i * delayBetween, () => {
-        const angle = angleOffset + (i * Math.PI * 2 / bulletCount);
-        this.shootBossBullet(source.x, source.y, angle, speed, lifetime);
-      });
-    }
-  }
-
-  // Patrón: Líneas rotatorias
-  // lineCount: número de líneas
-  // bulletPerLine: balas por línea
-  // lineLength: longitud de cada línea
-  // angleOffset: ángulo inicial (en radianes)
-  shootRotatingLines(source, lineCount, bulletPerLine, lineLength, angleOffset, speed, lifetime) {
-    for (let i = 0; i < lineCount; i++) {
-      const angle = angleOffset + (i * Math.PI * 2 / lineCount);
-      for (let dist = 20; dist < lineLength; dist += (lineLength - 20) / bulletPerLine) {
-        const x = source.x + Math.cos(angle) * dist;
-        const y = source.y + Math.sin(angle) * dist;
-        this.shootBossBullet(x, y, angle, speed, lifetime);
-      }
-    }
-  }
-
   // Patrón: Espiral completa (maneja todo el disparo de una vez)
   // bulletCount: número total de balas a disparar por brazo
   // arms: número de brazos de la espiral
@@ -2853,15 +2999,16 @@ class GameScene extends Phaser.Scene {
 
 
   drawBoss(boss) {
-    const typeData = BOSS_TYPES[boss.bossType];
-    this.graphics.fillStyle(typeData.color);
+    // Twins tienen forma especial
+    if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
+      const color = boss.bossType === 'twin1' ? 0xff00ff : 0x00ffff;
+      this.graphics.fillStyle(color);
 
-    if (boss.bossType === 'pattern') {
-      // Estrella de 6 puntas
+      // Estrella de 5 puntas
       this.graphics.beginPath();
-      for (let i = 0; i < 12; i++) {
-        const angle = (i * Math.PI / 6) - Math.PI / 2;
-        const radius = i % 2 === 0 ? 35 : 15;
+      for (let i = 0; i < 10; i++) {
+        const angle = (i * Math.PI / 5) - Math.PI / 2;
+        const radius = i % 2 === 0 ? 30 : 12;
         const x = boss.x + Math.cos(angle) * radius;
         const y = boss.y + Math.sin(angle) * radius;
         if (i === 0) this.graphics.moveTo(x, y);
@@ -2869,36 +3016,41 @@ class GameScene extends Phaser.Scene {
       }
       this.graphics.closePath();
       this.graphics.fillPath();
-    } else if (boss.bossType === 'phase' && !boss.hasChildren) {
-      // Estrella de 8 puntas
-      this.graphics.beginPath();
-      for (let i = 0; i < 16; i++) {
-        const angle = (i * Math.PI / 8) - Math.PI / 2;
-        const radius = i % 2 === 0 ? 40 : 18;
-        const x = boss.x + Math.cos(angle) * radius;
-        const y = boss.y + Math.sin(angle) * radius;
-        if (i === 0) this.graphics.moveTo(x, y);
-        else this.graphics.lineTo(x, y);
+    } else {
+      const typeData = BOSS_TYPES[boss.bossType];
+      this.graphics.fillStyle(typeData.color);
+
+      if (boss.bossType === 'pattern') {
+        // Estrella de 6 puntas
+        this.graphics.beginPath();
+        for (let i = 0; i < 12; i++) {
+          const angle = (i * Math.PI / 6) - Math.PI / 2;
+          const radius = i % 2 === 0 ? 35 : 15;
+          const x = boss.x + Math.cos(angle) * radius;
+          const y = boss.y + Math.sin(angle) * radius;
+          if (i === 0) this.graphics.moveTo(x, y);
+          else this.graphics.lineTo(x, y);
+        }
+        this.graphics.closePath();
+        this.graphics.fillPath();
+      } else if (boss.bossType === 'laser') {
+        // Estrella de 10 puntas rotando
+        this.graphics.save();
+        this.graphics.translateCanvas(boss.x, boss.y);
+        this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
+        this.graphics.beginPath();
+        for (let i = 0; i < 20; i++) {
+          const angle = (i * Math.PI / 10);
+          const radius = i % 2 === 0 ? 45 : 20;
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
+          if (i === 0) this.graphics.moveTo(x, y);
+          else this.graphics.lineTo(x, y);
+        }
+        this.graphics.closePath();
+        this.graphics.fillPath();
+        this.graphics.restore();
       }
-      this.graphics.closePath();
-      this.graphics.fillPath();
-    } else if (boss.bossType === 'laser') {
-      // Estrella de 10 puntas rotando
-      this.graphics.save();
-      this.graphics.translateCanvas(boss.x, boss.y);
-      this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-      this.graphics.beginPath();
-      for (let i = 0; i < 20; i++) {
-        const angle = (i * Math.PI / 10);
-        const radius = i % 2 === 0 ? 45 : 20;
-        const x = Math.cos(angle) * radius;
-        const y = Math.sin(angle) * radius;
-        if (i === 0) this.graphics.moveTo(x, y);
-        else this.graphics.lineTo(x, y);
-      }
-      this.graphics.closePath();
-      this.graphics.fillPath();
-      this.graphics.restore();
     }
 
     // Draw health bar
@@ -2914,31 +3066,6 @@ class GameScene extends Phaser.Scene {
     this.graphics.fillRect(barX, barY, barW, barH);
     this.graphics.fillStyle(0x00ff00);
     this.graphics.fillRect(barX, barY, barW * healthPercent, barH);
-  }
-
-  splitPhaseBoss(boss, childType, count) {
-    boss.hasChildren = true;
-    const typeData = ENEMY_TYPES[childType];
-
-    for (let i = 0; i < count; i++) {
-      const angle = (i * Math.PI * 2 / count);
-      const enemy = this.enemies.create(
-        boss.x + Math.cos(angle) * 50,
-        boss.y + Math.sin(angle) * 50,
-        null
-      );
-      enemy.setSize(typeData.size, typeData.size);
-      enemy.setVisible(false);
-      enemy.type = childType;
-      enemy.health = typeData.health * 2;
-      enemy.speed = typeData.speed;
-      enemy.shootDelay = typeData.shootDelay;
-      enemy.lastShot = 0;
-      enemy.spawnTime = this.time.now; // Tiempo cuando apareció
-      enemy.angle = 0;
-      enemy.isBoss = false;
-    }
-    this.playSound(400, 0.2);
   }
 
   openDoors() {
