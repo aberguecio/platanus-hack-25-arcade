@@ -413,6 +413,7 @@ class GameScene extends Phaser.Scene {
     this.gameOver = false;
     this.currentBoss = null;
     this.bossActive = false;
+    this.particles = []; // Inicializar sistema de partículas
     this.doorsOpen = false;
     this.transitioning = false;
     this.lastEnemyPosition = null;
@@ -959,6 +960,10 @@ class GameScene extends Phaser.Scene {
 
     // Check wave complete (pero no si las puertas están abiertas esperando transición)
     if (this.enemiesThisWave >= this.enemiesPerWave && this.enemies.children.size === 0 && !this.bossActive && !this.doorsOpen) {
+      // Efectos de fin de ronda
+      this.playSound(600, 0.25);
+      this.cameras.main.flash(300, 255, 255, 255);
+
       this.trySpawnPowerup(false, this.lastEnemyPosition); // false = no es boss
       this.startNextWave();
     }
@@ -971,9 +976,47 @@ class GameScene extends Phaser.Scene {
       this.hpText2.setText('P2: ' + hearts2);
     }
 
-    // Update cooldowns
-    if (this.p1.specialCooldown > 0) this.p1.specialCooldown -= delta;
-    if (this.numPlayers === 2 && this.p2.specialCooldown > 0) this.p2.specialCooldown -= delta;
+    // Update cooldowns y notificar cuando se carga
+    if (this.p1.specialCooldown > 0) {
+      const prevCooldown = this.p1.specialCooldown;
+      this.p1.specialCooldown -= delta;
+      // Si acabó de cargarse (era >0 y ahora es <=0), hacer sonido y efecto
+      if (prevCooldown > 0 && this.p1.specialCooldown <= 0 && prevCooldown > delta) {
+        this.playSound(1000, 0.15);
+        this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ff00, 6);
+      }
+    }
+    if (this.numPlayers === 2 && this.p2.specialCooldown > 0) {
+      const prevCooldown = this.p2.specialCooldown;
+      this.p2.specialCooldown -= delta;
+      if (prevCooldown > 0 && this.p2.specialCooldown <= 0 && prevCooldown > delta) {
+        this.playSound(1000, 0.15);
+        this.createExplosionEffect(this.p2.x, this.p2.y, 0x0099ff, 6);
+      }
+    }
+
+    // Update and draw particles
+    if (this.particles) {
+      this.particles = this.particles.filter(p => {
+        const age = time - p.startTime;
+        if (age > p.life) return false;
+
+        // Update position
+        p.x += p.vx * delta / 1000;
+        p.y += p.vy * delta / 1000;
+
+        // Slow down
+        p.vx *= 0.95;
+        p.vy *= 0.95;
+
+        // Draw
+        const alpha = 1 - (age / p.life);
+        this.graphics.fillStyle(p.color, alpha);
+        this.graphics.fillCircle(p.x, p.y, p.size * alpha);
+
+        return true;
+      });
+    }
   }
 
   drawCooldownBar(x, y, cooldown) {
@@ -1119,6 +1162,9 @@ class GameScene extends Phaser.Scene {
       }
 
       this.playSound(600, 0.2);
+      // Efecto visual más grande para disparo especial
+      this.createMuzzleFlash(player.x, player.y, angle, color, 12);
+      this.cameras.main.shake(100, 0.002); // Pequeño shake en special
     } else {
       // Balas normales con spread
       const bulletCount = player.spreadBullets || 1;
@@ -1154,6 +1200,8 @@ class GameScene extends Phaser.Scene {
         });
       }
       this.playSound(800, 0.08);
+      // Pequeño efecto visual al disparar
+      this.createMuzzleFlash(player.x, player.y, angle, color);
     }
   }
 
@@ -1352,6 +1400,7 @@ class GameScene extends Phaser.Scene {
         if (b && b.active) b.destroy();
       });
       this.playSound(400, 0.1);
+      this.createMuzzleFlash(enemy.x, enemy.y, angle, 0xff0000, 4);
     } else if (enemy.type === 'square') {
       // Shoot from 4 corners
       for (let i = 0; i < 4; i++) {
@@ -1367,6 +1416,7 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(3000, () => {
           if (b && b.active) b.destroy();
         });
+        this.createMuzzleFlash(enemy.x, enemy.y, angle, 0xff0000, 3);
       }
       this.playSound(400, 0.1);
     } else if (enemy.type === 'pentagon') {
@@ -1686,6 +1736,10 @@ class GameScene extends Phaser.Scene {
 
     enemy.health -= damage;
 
+    // Efecto visual al dañar enemigo
+    this.createExplosionEffect(enemy.x, enemy.y, bullet.color || 0xffffff, 4);
+    this.playSound(300, 0.05);
+
     if (enemy.health <= 0) {
       // Guardar posición antes de destruir
       const deathPosition = { x: enemy.x, y: enemy.y };
@@ -1698,6 +1752,11 @@ class GameScene extends Phaser.Scene {
         this.bossActive = false;
         this.openDoors();
         this.playSound(600, 0.3);
+
+        // Efectos visuales de muerte de boss (grande)
+        this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff00ff, 30);
+        this.cameras.main.shake(400, 0.008);
+        this.cameras.main.flash(400, 255, 255, 0);
 
         // Spawn powerup (100% chance on boss)
         // 50% maxHeart, 50% extraBullet
@@ -1718,10 +1777,11 @@ class GameScene extends Phaser.Scene {
         this.score += typeData.points;
         this.scoreText.setText('Score: ' + this.score);
         this.playSound(500, 0.1);
+
+        // Efecto visual de muerte de enemigo normal
+        this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff8800, 10);
       }
       enemy.destroy();
-    } else {
-      this.playSound(300, 0.05);
     }
   }
 
@@ -1733,12 +1793,20 @@ class GameScene extends Phaser.Scene {
       if (player.hasShield) {
         player.hasShield = false;
         this.playSound(400, 0.2); // Sonido de shield roto
+        // Efecto visual de shield roto
+        this.createExplosionEffect(player.x, player.y, 0x00ffff, 12);
         return;
       }
 
       player.health -= 1; // 1 corazón de daño
       this.damageTakenThisWave = true;
       this.playSound(200, 0.1);
+
+      // Efecto visual de daño (flash rojo)
+      this.createExplosionEffect(player.x, player.y, 0xff0000, 8);
+
+      // Screen shake al recibir daño
+      this.cameras.main.shake(200, 0.005);
 
       if (player.health <= 0) {
         this.endGame();
@@ -1755,6 +1823,20 @@ class GameScene extends Phaser.Scene {
     // Reset damage tracking for new wave
     this.damageTakenThisWave = false;
 
+    // Efectos de inicio de ronda
+    this.playSound(700, 0.2);
+    this.cameras.main.flash(200, 0, 255, 0);
+
+    // Mostrar mensaje de nueva ronda
+    const waveMsg = this.add.text(400, 100, 'WAVE ' + this.wave, {
+      fontSize: '48px',
+      fontFamily: 'Arial',
+      color: '#0f0',
+      stroke: '#000',
+      strokeThickness: 6
+    }).setOrigin(0.5);
+    this.time.delayedCall(2000, () => waveMsg.destroy());
+
     // Check if this is a boss wave
     if (this.wave === 5 || this.wave === 10 || this.wave === 20) {
       this.spawnBoss();
@@ -1766,6 +1848,12 @@ class GameScene extends Phaser.Scene {
 
   endGame() {
     this.gameOver = true;
+
+    // Efectos de muerte
+    this.createExplosionEffect(this.p1.x, this.p1.y, 0xff0000, 20);
+    this.cameras.main.shake(500, 0.01);
+    this.cameras.main.flash(500, 255, 0, 0);
+    this.playSound(150, 0.5);
 
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.8);
@@ -1822,6 +1910,49 @@ class GameScene extends Phaser.Scene {
     osc.stop(ctx.currentTime + dur);
   }
 
+  createExplosionEffect(x, y, color, particleCount = 8) {
+    // Crear partículas que explotan hacia afuera
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount;
+      const speed = 100 + Math.random() * 100;
+      const particle = {
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 300 + Math.random() * 200,
+        startTime: this.time.now,
+        color: color,
+        size: 3 + Math.random() * 3
+      };
+
+      if (!this.particles) this.particles = [];
+      this.particles.push(particle);
+    }
+  }
+
+  createMuzzleFlash(x, y, angle, color, particleCount = 6) {
+    // Crear partículas en la dirección del disparo
+    for (let i = 0; i < particleCount; i++) {
+      const spread = (Math.random() - 0.5) * 0.5; // Pequeño spread
+      const shotAngle = angle + spread;
+      const speed = 150 + Math.random() * 100;
+      const particle = {
+        x: x + Math.cos(angle) * 20,
+        y: y + Math.sin(angle) * 20,
+        vx: Math.cos(shotAngle) * speed,
+        vy: Math.sin(shotAngle) * speed,
+        life: 150 + Math.random() * 100,
+        startTime: this.time.now,
+        color: color,
+        size: 2 + Math.random() * 2
+      };
+
+      if (!this.particles) this.particles = [];
+      this.particles.push(particle);
+    }
+  }
+
   loadMap() {
     // Clear existing obstacles
     this.obstacles.clear(true, true);
@@ -1873,6 +2004,11 @@ class GameScene extends Phaser.Scene {
     boss.wave2Fired = false;
 
     this.currentBoss = boss;
+
+    // Efectos de aparición de boss
+    this.cameras.main.shake(800, 0.01);
+    this.cameras.main.flash(800, 255, 0, 0);
+    this.createExplosionEffect(400, 300, 0xff0000, 20);
 
     // Show boss intro message
     const msg = this.add.text(400, 250, 'WARNING!\n' + typeData.name, {
@@ -2102,11 +2238,18 @@ class GameScene extends Phaser.Scene {
 
   collectPowerup(player, powerup) {
     const type = powerup.type;
+    const px = powerup.x;
+    const py = powerup.y;
+    const powerupData = POWERUP_TYPES[type];
+
     powerup.destroy();
     this.playSound(800, 0.3);
 
+    // Efectos visuales al recoger powerup
+    this.createExplosionEffect(px, py, powerupData.color, 12);
+    this.cameras.main.flash(100, 255, 255, 255);
+
     let message = '';
-    const powerupData = POWERUP_TYPES[type];
     const color = '#' + powerupData.color.toString(16).padStart(6, '0');
 
     // Aplicar efectos según el tipo
@@ -2721,18 +2864,25 @@ class GameScene extends Phaser.Scene {
 
     console.log('Avanzando al nivel:', this.level, 'Wave actual:', this.wave);
 
+    // Efectos de transición de sala
+    this.cameras.main.fade(500, 0, 0, 0);
+    this.playSound(900, 0.3);
+    this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ffff, 15);
+
     // Guardar estado completo de jugadores
     const p1State = this.savePlayerState(this.p1);
     const p2State = this.numPlayers === 2 ? this.savePlayerState(this.p2) : null;
 
-    // Restart scene preservando todo
-    this.scene.restart({
-      players: this.numPlayers,
-      level: this.level,
-      wave: this.wave,
-      score: this.score,
-      p1State: p1State,
-      p2State: p2State
+    // Restart scene preservando todo (después del fade)
+    this.time.delayedCall(500, () => {
+      this.scene.restart({
+        players: this.numPlayers,
+        level: this.level,
+        wave: this.wave,
+        score: this.score,
+        p1State: p1State,
+        p2State: p2State
+      });
     });
   }
 
