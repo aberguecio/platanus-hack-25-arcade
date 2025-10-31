@@ -197,6 +197,11 @@ class GameScene extends Phaser.Scene {
     this.bossActive = false;
     this.doorsOpen = false;
     this.transitioning = false;
+    this.lastEnemyPosition = null;
+
+    // Guardar estado de jugadores para restaurar después
+    this.p1State = data.p1State || null;
+    this.p2State = data.p2State || null;
   }
 
   create() {
@@ -285,14 +290,16 @@ class GameScene extends Phaser.Scene {
     this.obstacleData = [];
     this.loadMap();
 
-    // Players
+    // Players (sistema de corazones)
     this.p1 = this.physics.add.sprite(300, 300, null);
     this.p1.setSize(30, 30);
     this.p1.setVisible(false);
-    this.p1.health = 100;
+    this.p1.health = this.p1State ? this.p1State.health : 5; // 5 corazones por defecto
+    this.p1.maxHealth = this.p1State ? this.p1State.maxHealth : 5;
     this.p1.speed = 200;
     this.p1.angle = 0;
     this.p1.specialCooldown = 0;
+    this.p1.specialBullets = this.p1State ? this.p1State.specialBullets : 1;
 
     this.players = [this.p1];
 
@@ -300,10 +307,12 @@ class GameScene extends Phaser.Scene {
       this.p2 = this.physics.add.sprite(500, 300, null);
       this.p2.setSize(30, 30);
       this.p2.setVisible(false);
-      this.p2.health = 100;
+      this.p2.health = this.p2State ? this.p2State.health : 5;
+      this.p2.maxHealth = this.p2State ? this.p2State.maxHealth : 5;
       this.p2.speed = 200;
       this.p2.angle = 0;
       this.p2.specialCooldown = 0;
+      this.p2.specialBullets = this.p2State ? this.p2State.specialBullets : 1;
       this.players.push(this.p2);
     }
 
@@ -314,6 +323,12 @@ class GameScene extends Phaser.Scene {
 
     // Enemies
     this.enemies = this.physics.add.group();
+
+    // Powerups
+    this.powerups = this.physics.add.group();
+
+    // Track damage this wave
+    this.damageTakenThisWave = false;
 
     // Collisions
     this.players.forEach(p => {
@@ -349,6 +364,12 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.p1, this.doorZones, (p, d) => this.handleDoorOverlap(p, d));
     if (this.numPlayers === 2) {
       this.physics.add.overlap(this.p2, this.doorZones, (p, d) => this.handleDoorOverlap(p, d));
+    }
+
+    // Powerup collision detection
+    this.physics.add.overlap(this.p1, this.powerups, (p, pow) => this.collectPowerup(p, pow));
+    if (this.numPlayers === 2) {
+      this.physics.add.overlap(this.p2, this.powerups, (p, pow) => this.collectPowerup(p, pow));
     }
 
     // Controls
@@ -496,6 +517,11 @@ class GameScene extends Phaser.Scene {
       else this.drawEnemy(e);
     });
 
+    // Draw powerups
+    this.powerups.children.entries.forEach(p => {
+      this.drawPowerup(p);
+    });
+
     // Player 1 movement
     this.updatePlayer(this.p1, this.keys.w, this.keys.s, this.keys.a, this.keys.d, time, 1, this.keys.q, this.keys.e);
 
@@ -522,13 +548,16 @@ class GameScene extends Phaser.Scene {
 
     // Check wave complete (pero no si las puertas están abiertas esperando transición)
     if (this.enemiesThisWave >= this.enemiesPerWave && this.enemies.children.size === 0 && !this.bossActive && !this.doorsOpen) {
+      this.trySpawnPowerup(false, this.lastEnemyPosition); // false = no es boss
       this.startNextWave();
     }
 
-    // Update UI
-    this.hpText1.setText('P1: ' + Math.max(0, Math.floor(this.p1.health)) + ' HP');
+    // Update UI (corazones)
+    const hearts1 = '♥'.repeat(Math.max(0, this.p1.health)) + '♡'.repeat(Math.max(0, this.p1.maxHealth - this.p1.health));
+    this.hpText1.setText('P1: ' + hearts1);
     if (this.numPlayers === 2) {
-      this.hpText2.setText('P2: ' + Math.max(0, Math.floor(this.p2.health)) + ' HP');
+      const hearts2 = '♥'.repeat(Math.max(0, this.p2.health)) + '♡'.repeat(Math.max(0, this.p2.maxHealth - this.p2.health));
+      this.hpText2.setText('P2: ' + hearts2);
     }
 
     // Update cooldowns
@@ -585,8 +614,13 @@ class GameScene extends Phaser.Scene {
     const color = player === this.p1 ? 0x00ff00 : 0x0099ff;
 
     if (special) {
-      for (let i = -1; i <= 1; i++) {
-        const spreadAngle = angle + i * 0.3;
+      // Número de balas especiales (aumenta con powerups)
+      const bulletCount = player.specialBullets || 1;
+      const spread = bulletCount > 1 ? 0.3 : 0;
+
+      for (let i = 0; i < bulletCount; i++) {
+        const offset = (i - (bulletCount - 1) / 2) * spread;
+        const spreadAngle = angle + offset;
         const b = group.create(
           player.x + Math.cos(spreadAngle) * 25,
           player.y + Math.sin(spreadAngle) * 25
@@ -600,7 +634,7 @@ class GameScene extends Phaser.Scene {
           if (b && b.active) b.destroy();
         });
       }
-      this.playSound(600, 0.15);
+      this.playSound(600, 0.2);
     } else {
       const b = group.create(
         player.x + Math.cos(angle) * 25,
@@ -812,6 +846,10 @@ class GameScene extends Phaser.Scene {
     enemy.health -= damage;
 
     if (enemy.health <= 0) {
+      // Guardar posición antes de destruir
+      const deathPosition = { x: enemy.x, y: enemy.y };
+      this.lastEnemyPosition = deathPosition;
+
       if (enemy.isBoss) {
         const typeData = BOSS_TYPES[enemy.bossType];
         this.score += typeData.points;
@@ -819,6 +857,11 @@ class GameScene extends Phaser.Scene {
         this.bossActive = false;
         this.openDoors();
         this.playSound(600, 0.3);
+
+        // Spawn powerup (100% chance on boss)
+        // 50% maxHeart, 50% extraBullet
+        const bossType = Math.random() < 0.5 ? 'maxHeart' : 'extraBullet';
+        this.spawnPowerup(deathPosition, bossType);
 
         // Show message
         const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
@@ -845,7 +888,8 @@ class GameScene extends Phaser.Scene {
     bullet.destroy();
 
     if (!DEBUG_GODMODE) {
-      player.health -= 10;
+      player.health -= 1; // 1 corazón de daño
+      this.damageTakenThisWave = true;
       this.playSound(200, 0.1);
 
       if (player.health <= 0) {
@@ -859,6 +903,9 @@ class GameScene extends Phaser.Scene {
     this.waveText.setText('Wave: ' + this.wave);
     this.enemiesThisWave = 0;
     this.spawnDelay = Math.max(800, (2000 - (this.wave - 1) * 100) / DIFFICULTY);
+
+    // Reset damage tracking for new wave
+    this.damageTakenThisWave = false;
 
     // Check if this is a boss wave
     if (this.wave === 5 || this.wave === 10 || this.wave === 20) {
@@ -1012,7 +1059,7 @@ class GameScene extends Phaser.Scene {
       if (boss.attackPhase === 0) {
         // Fase espiral: disparar toda la espiral de una vez (2 segundos de duración)
         if (!boss.spiralFired) {
-          this.shootSpiral(boss, 20, 2, Math.PI, 0, 200, 3000, 100);
+          this.shootSpiral(boss, 20, 3, Math.PI, 0, 200, 3000, 100);
           boss.spiralFired = true;
         }
         if (phaseTime >= 2000) {
@@ -1080,6 +1127,148 @@ class GameScene extends Phaser.Scene {
         this.shootWave(boss, 6, 0, 200, 3000, 25);
         boss.lastShot = time;
       }
+    }
+  }
+
+  // ===== SISTEMA DE POWERUPS =====
+
+  trySpawnPowerup(isBoss, position) {
+    let powerupChance;
+    if (isBoss) {
+      powerupChance = 1.0; // 100% en boss
+    } else if (this.damageTakenThisWave) {
+      powerupChance = 0.05; // 5% si recibiste daño
+    } else {
+      powerupChance = 0.15; // 15% sin daño
+    }
+
+    // Intentar spawner powerup de balas
+    if (Math.random() < powerupChance) {
+      this.spawnPowerup(position, 'extraBullet');
+    } else if (!isBoss) {
+      // Si no salió powerup de balas, 10% chance de corazón
+      if (Math.random() < 0.10) {
+        this.spawnPowerup(position, 'heart');
+      }
+    }
+  }
+
+  spawnPowerup(position, type) {
+    // Usar posición del enemigo muerto, o centro si no hay
+    const x = position ? position.x : 400;
+    const y = position ? position.y : 300;
+
+    const powerup = this.powerups.create(x, y, null);
+    powerup.setSize(30, 30);
+    powerup.setVisible(false);
+    powerup.type = type;
+
+    this.playSound(700, 0.2);
+  }
+
+  collectPowerup(player, powerup) {
+    const type = powerup.type;
+    powerup.destroy();
+
+    if (type === 'extraBullet') {
+      player.specialBullets++;
+      this.playSound(800, 0.3);
+
+      const msg = this.add.text(400, 350, `POWERUP! Special: ${player.specialBullets} bullets`, {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        color: '#ffff00'
+      }).setOrigin(0.5);
+
+      this.time.delayedCall(2000, () => msg.destroy());
+    } else if (type === 'heart') {
+      // Restaurar 1 corazón, máximo hasta el límite actual
+      if (player.health < player.maxHealth) {
+        player.health++;
+        this.playSound(600, 0.3);
+
+        const msg = this.add.text(400, 350, `+1 HEART! (${player.health}/${player.maxHealth})`, {
+          fontSize: '24px',
+          fontFamily: 'Arial',
+          color: '#ff0066'
+        }).setOrigin(0.5);
+
+        this.time.delayedCall(2000, () => msg.destroy());
+      }
+    } else if (type === 'maxHeart') {
+      // Aumentar máximo de corazones y curar 1
+      player.maxHealth++;
+      player.health++;
+      this.playSound(900, 0.3);
+
+      const msg = this.add.text(400, 350, `MAX HEART UP! (${player.health}/${player.maxHealth})`, {
+        fontSize: '24px',
+        fontFamily: 'Arial',
+        color: '#ff00ff'
+      }).setOrigin(0.5);
+
+      this.time.delayedCall(2000, () => msg.destroy());
+    }
+  }
+
+  drawPowerup(powerup) {
+    const time = this.time.now;
+    const pulse = Math.sin(time * 0.005) * 0.2 + 0.8;
+
+    if (powerup.type === 'extraBullet') {
+      // Dos óvalos cruzados (amarillo)
+      this.graphics.fillStyle(0xffff00, pulse);
+
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.fillEllipse(0, 0, 30, 15);
+      this.graphics.fillEllipse(0, 0, 15, 30);
+      this.graphics.restore();
+
+      this.graphics.lineStyle(2, 0xffffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.strokeEllipse(0, 0, 30, 15);
+      this.graphics.strokeEllipse(0, 0, 15, 30);
+      this.graphics.restore();
+    } else if (powerup.type === 'heart') {
+      // Corazón simple (rojo/rosa)
+      this.graphics.fillStyle(0xff0066, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+
+      // Dibujar corazón con dos círculos y un triángulo
+      this.graphics.fillCircle(-7, -5, 10);
+      this.graphics.fillCircle(7, -5, 10);
+      this.graphics.fillTriangle(-15, 0, 15, 0, 0, 18);
+
+      this.graphics.restore();
+
+      this.graphics.lineStyle(2, 0xffffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.strokeCircle(-7, -5, 10);
+      this.graphics.strokeCircle(7, -5, 10);
+      this.graphics.restore();
+    } else if (powerup.type === 'maxHeart') {
+      // Corazón con brillo especial (magenta)
+      this.graphics.fillStyle(0xff00ff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+
+      // Corazón más grande
+      this.graphics.fillCircle(-9, -6, 12);
+      this.graphics.fillCircle(9, -6, 12);
+      this.graphics.fillTriangle(-18, 0, 18, 0, 0, 22);
+
+      this.graphics.restore();
+
+      // Estrella brillante en el centro
+      this.graphics.fillStyle(0xffffff, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y + 2);
+      this.graphics.fillCircle(0, 0, 4);
+      this.graphics.restore();
     }
   }
 
@@ -1300,12 +1489,27 @@ class GameScene extends Phaser.Scene {
 
     console.log('Avanzando al nivel:', this.level, 'Wave actual:', this.wave);
 
-    // Restart scene with new level, manteniendo el wave actual
+    // Guardar estado de jugadores
+    const p1State = {
+      health: this.p1.health,
+      maxHealth: this.p1.maxHealth,
+      specialBullets: this.p1.specialBullets
+    };
+
+    const p2State = this.numPlayers === 2 ? {
+      health: this.p2.health,
+      maxHealth: this.p2.maxHealth,
+      specialBullets: this.p2.specialBullets
+    } : null;
+
+    // Restart scene with new level, manteniendo el wave actual y estado de jugadores
     this.scene.restart({
       players: this.numPlayers,
       level: this.level,
-      wave: this.wave, // Mantener el wave donde estábamos
-      score: this.score
+      wave: this.wave,
+      score: this.score,
+      p1State: p1State,
+      p2State: p2State
     });
   }
 
