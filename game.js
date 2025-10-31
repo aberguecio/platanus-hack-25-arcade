@@ -970,6 +970,11 @@ class GameScene extends Phaser.Scene {
     boss.patternIndex = 0;
     boss.hasChildren = false;
 
+    // Variables para el pattern boss (espiral)
+    boss.attackPhase = 0; // 0: espiral, 1: pausa, 2: ondas, 3: pausa
+    boss.phaseStartTime = 0;
+    boss.spiralBulletCount = 0;
+
     this.currentBoss = boss;
 
     // Show boss intro message
@@ -997,11 +1002,64 @@ class GameScene extends Phaser.Scene {
         (Math.cos(angle) * radius - (boss.x - centerX)) * 2,
         (Math.sin(angle) * radius - (boss.y - centerY)) * 2
       );
+
+      // Manejar fases del ataque
+      if (boss.phaseStartTime === 0) boss.phaseStartTime = time;
+      const phaseTime = time - boss.phaseStartTime;
+
+      if (boss.attackPhase === 0) {
+        // Fase espiral: 2 segundos disparando
+        if (phaseTime < 2000) {
+          // Disparar cada 100ms
+          if (time - boss.lastShot > 100) {
+            const progress = boss.spiralBulletCount / 20;
+            this.shootSpiralAnimated(boss, progress, 2, Math.PI, 200, 3000);
+            this.playSound(500, 0.05);
+            boss.lastShot = time;
+            boss.spiralBulletCount++;
+          }
+        } else {
+          boss.attackPhase = 1;
+          boss.phaseStartTime = time;
+        }
+      } else if (boss.attackPhase === 1) {
+        // Pausa 1: 2 segundos
+        if (phaseTime >= 2000) {
+          boss.attackPhase = 2;
+          boss.phaseStartTime = time;
+        }
+      } else if (boss.attackPhase === 2) {
+        // Fase ondas: disparar 2 ondas de balas
+        if (phaseTime < 100) {
+          this.shootWave(boss, 50, 0, 200, 3000);
+          this.playSound(600, 0.2);
+        } else if (phaseTime >= 500 && phaseTime < 600) {
+          this.shootWave(boss, 50, 0, 200, 3000);
+          this.playSound(600, 0.2);
+        } else if (phaseTime >= 2000) {
+          boss.attackPhase = 3;
+          boss.phaseStartTime = time;
+        }
+      } else if (boss.attackPhase === 3) {
+        // Pausa 2: 2 segundos
+        if (phaseTime >= 2000) {
+          boss.attackPhase = 0;
+          boss.phaseStartTime = time;
+          boss.spiralBulletCount = 0;
+        }
+      }
     } else if (boss.bossType === 'laser') {
       // Rotate constantly
       boss.angle += delta * 0.05;
       // Stay in center
       boss.setVelocity((400 - boss.x) * 2, (300 - boss.y) * 2);
+
+      // Shoot: 4 líneas rotatorias
+      if (time - boss.lastShot > boss.shootDelay) {
+        this.shootRotatingLines(boss, 4, 7, 100, boss.angle * Math.PI / 180, 200, 2000);
+        this.playSound(400, 0.12);
+        boss.lastShot = time;
+      }
     } else if (boss.bossType === 'phase' && !boss.hasChildren) {
       // Move towards nearest player
       let target = this.p1;
@@ -1018,96 +1076,116 @@ class GameScene extends Phaser.Scene {
       } else {
         boss.setVelocity(0);
       }
-    }
 
-    // Shoot
-    if (time - boss.lastShot > boss.shootDelay) {
-      this.shootBoss(boss, time);
-      boss.lastShot = time;
+      // Shoot: onda circular de 6 direcciones
+      if (time - boss.lastShot > boss.shootDelay) {
+        this.shootWave(boss, 6, 0, 200, 3000);
+        this.playSound(450, 0.12);
+        boss.lastShot = time;
+      }
+    }
+  }
+
+  // ===== SISTEMA MODULAR DE DISPAROS DE BOSSES =====
+  // Este sistema permite crear patrones de disparo reutilizables.
+  // Para crear un nuevo boss o enemigo, simplemente llama a estas funciones
+  // con diferentes parámetros desde updateBoss() o updateEnemy().
+  //
+  // Ejemplos de uso:
+  // - Boss con espiral de 3 brazos: shootSpiralAnimated(boss, progress, 3, Math.PI*2, 250, 2500)
+  // - Enemigo con 8 direcciones: shootWave(enemy, 8, 0, 180, 2000)
+  // - Boss con 6 líneas: shootRotatingLines(boss, 6, 5, 120, 0, 220, 1800)
+  // - Espiral completa: shootSpiral(boss, 40, 4, Math.PI*4, 0, 200, 3000)
+
+  // Función genérica para crear una bala desde una posición y ángulo
+  shootBossBullet(x, y, angle, speed, lifetime) {
+    const b = this.enemyBullets.create(x, y);
+    b.setSize(10, 10);
+    b.setVisible(false);
+    b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    this.time.delayedCall(lifetime, () => { if (b && b.active) b.destroy(); });
+    return b;
+  }
+
+  // Patrón: Disparo en espiral
+  // bulletCount: número de balas a disparar
+  // arms: número de brazos de la espiral
+  // rotation: ángulo total de rotación (en radianes)
+  // angleOffset: ángulo inicial (en radianes)
+  shootSpiral(source, bulletCount, arms, rotation, angleOffset, speed, lifetime) {
+    for (let i = 0; i < bulletCount; i++) {
+      const progress = i / bulletCount;
+      const baseAngle = angleOffset + (progress * rotation);
+
+      for (let arm = 0; arm < arms; arm++) {
+        const angle = baseAngle + (arm * Math.PI * 2 / arms);
+        this.shootBossBullet(source.x, source.y, angle, speed, lifetime);
+      }
     }
   }
 
-  shootBoss(boss, time) {
-    const speed = 200;
-
-    if (boss.bossType === 'pattern') {
-      // Cycle through 3 patterns
-      if (boss.patternIndex === 0) {
-        // Spiral pattern
-        for (let i = 0; i < 8; i++) {
-          const angle = (time * 0.002) + (i * Math.PI / 4);
-          const b = this.enemyBullets.create(boss.x, boss.y);
-          b.setSize(10, 10);
-          b.setVisible(false);
-          b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-          this.time.delayedCall(3000, () => { if (b && b.active) b.destroy(); });
-        }
-      } else if (boss.patternIndex === 1) {
-        // Wave pattern (4 directions)
-        for (let dir = 0; dir < 4; dir++) {
-          for (let i = 0; i < 3; i++) {
-            const angle = dir * Math.PI / 2;
-            const spread = (i - 1) * 0.3;
-            const b = this.enemyBullets.create(boss.x, boss.y);
-            b.setSize(10, 10);
-            b.setVisible(false);
-            b.setVelocity(Math.cos(angle + spread) * speed, Math.sin(angle + spread) * speed);
-            this.time.delayedCall(3000, () => { if (b && b.active) b.destroy(); });
-          }
-        }
-      } else {
-        // Circle pattern
-        for (let i = 0; i < 12; i++) {
-          const angle = i * Math.PI * 2 / 12;
-          const b = this.enemyBullets.create(boss.x, boss.y);
-          b.setSize(10, 10);
-          b.setVisible(false);
-          b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-          this.time.delayedCall(3000, () => { if (b && b.active) b.destroy(); });
-        }
-      }
-      boss.patternIndex = (boss.patternIndex + 1) % 3;
-      this.playSound(500, 0.15);
-    } else if (boss.bossType === 'laser') {
-      // Shoot 4 rotating lines
-      for (let i = 0; i < 4; i++) {
-        const angle = (boss.angle + i * 90) * Math.PI / 180;
-        for (let dist = 20; dist < 100; dist += 15) {
-          const b = this.enemyBullets.create(
-            boss.x + Math.cos(angle) * dist,
-            boss.y + Math.sin(angle) * dist
-          );
-          b.setSize(10, 10);
-          b.setVisible(false);
-          b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-          this.time.delayedCall(2000, () => { if (b && b.active) b.destroy(); });
-        }
-      }
-      this.playSound(400, 0.12);
-    } else if (boss.bossType === 'phase') {
-      // Shoot 6 directions
-      for (let i = 0; i < 6; i++) {
-        const angle = i * Math.PI * 2 / 6;
-        const b = this.enemyBullets.create(boss.x, boss.y);
-        b.setSize(10, 10);
-        b.setVisible(false);
-        b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-        this.time.delayedCall(3000, () => { if (b && b.active) b.destroy(); });
-      }
-      this.playSound(450, 0.12);
+  // Patrón: Onda circular (explosión radial)
+  // bulletCount: número de balas en el círculo
+  // angleOffset: ángulo inicial de rotación (en radianes)
+  shootWave(source, bulletCount, angleOffset, speed, lifetime) {
+    for (let i = 0; i < bulletCount; i++) {
+      const angle = angleOffset + (i * Math.PI * 2 / bulletCount);
+      this.shootBossBullet(source.x, source.y, angle, speed, lifetime);
     }
   }
+
+  // Patrón: Líneas rotatorias
+  // lineCount: número de líneas
+  // bulletPerLine: balas por línea
+  // lineLength: longitud de cada línea
+  // angleOffset: ángulo inicial (en radianes)
+  shootRotatingLines(source, lineCount, bulletPerLine, lineLength, angleOffset, speed, lifetime) {
+    for (let i = 0; i < lineCount; i++) {
+      const angle = angleOffset + (i * Math.PI * 2 / lineCount);
+      for (let dist = 20; dist < lineLength; dist += (lineLength - 20) / bulletPerLine) {
+        const x = source.x + Math.cos(angle) * dist;
+        const y = source.y + Math.sin(angle) * dist;
+        this.shootBossBullet(x, y, angle, speed, lifetime);
+      }
+    }
+  }
+
+  // Patrón: Espiral animada (para usar con tiempo)
+  // progress: valor entre 0 y 1 que indica el avance de la espiral
+  // arms: número de brazos de la espiral
+  // maxRotation: rotación máxima (en radianes)
+  shootSpiralAnimated(source, progress, arms, maxRotation, speed, lifetime) {
+    const angle = progress * maxRotation;
+    for (let arm = 0; arm < arms; arm++) {
+      const armAngle = angle + (arm * Math.PI * 2 / arms);
+      this.shootBossBullet(source.x, source.y, armAngle, speed, lifetime);
+    }
+  }
+
 
   drawBoss(boss) {
     const typeData = BOSS_TYPES[boss.bossType];
     this.graphics.fillStyle(typeData.color);
 
     if (boss.bossType === 'pattern') {
-      // Draw star (8 points)
+      // Estrella de 6 puntas
       this.graphics.beginPath();
-      for (let i = 0; i < 8; i++) {
-        const angle = i * Math.PI / 4 - Math.PI / 2;
-        const radius = i % 2 === 0 ? 30 : 15;
+      for (let i = 0; i < 12; i++) {
+        const angle = (i * Math.PI / 6) - Math.PI / 2;
+        const radius = i % 2 === 0 ? 35 : 15;
+        const x = boss.x + Math.cos(angle) * radius;
+        const y = boss.y + Math.sin(angle) * radius;
+        if (i === 0) this.graphics.moveTo(x, y);
+        else this.graphics.lineTo(x, y);
+      }
+      this.graphics.closePath();
+      this.graphics.fillPath();
+    } else if (boss.bossType === 'phase' && !boss.hasChildren) {
+      // Estrella de 8 puntas
+      this.graphics.beginPath();
+      for (let i = 0; i < 16; i++) {
+        const angle = (i * Math.PI / 8) - Math.PI / 2;
+        const radius = i % 2 === 0 ? 40 : 18;
         const x = boss.x + Math.cos(angle) * radius;
         const y = boss.y + Math.sin(angle) * radius;
         if (i === 0) this.graphics.moveTo(x, y);
@@ -1116,33 +1194,22 @@ class GameScene extends Phaser.Scene {
       this.graphics.closePath();
       this.graphics.fillPath();
     } else if (boss.bossType === 'laser') {
-      // Draw octagon with rotation
+      // Estrella de 10 puntas rotando
       this.graphics.save();
       this.graphics.translateCanvas(boss.x, boss.y);
       this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
       this.graphics.beginPath();
-      for (let i = 0; i < 8; i++) {
-        const angle = i * Math.PI / 4;
-        const x = Math.cos(angle) * 40;
-        const y = Math.sin(angle) * 40;
+      for (let i = 0; i < 20; i++) {
+        const angle = (i * Math.PI / 10);
+        const radius = i % 2 === 0 ? 45 : 20;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
         if (i === 0) this.graphics.moveTo(x, y);
         else this.graphics.lineTo(x, y);
       }
       this.graphics.closePath();
       this.graphics.fillPath();
       this.graphics.restore();
-    } else if (boss.bossType === 'phase' && !boss.hasChildren) {
-      // Draw hexagon
-      this.graphics.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const angle = i * Math.PI / 3 - Math.PI / 2;
-        const x = boss.x + Math.cos(angle) * 35;
-        const y = boss.y + Math.sin(angle) * 35;
-        if (i === 0) this.graphics.moveTo(x, y);
-        else this.graphics.lineTo(x, y);
-      }
-      this.graphics.closePath();
-      this.graphics.fillPath();
     }
 
     // Draw health bar
