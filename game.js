@@ -973,7 +973,9 @@ class GameScene extends Phaser.Scene {
     // Variables para el pattern boss (espiral)
     boss.attackPhase = 0; // 0: espiral, 1: pausa, 2: ondas, 3: pausa
     boss.phaseStartTime = 0;
-    boss.spiralBulletCount = 0;
+    boss.spiralFired = false;
+    boss.wave1Fired = false;
+    boss.wave2Fired = false;
 
     this.currentBoss = boss;
 
@@ -1008,19 +1010,15 @@ class GameScene extends Phaser.Scene {
       const phaseTime = time - boss.phaseStartTime;
 
       if (boss.attackPhase === 0) {
-        // Fase espiral: 2 segundos disparando
-        if (phaseTime < 2000) {
-          // Disparar cada 100ms
-          if (time - boss.lastShot > 100) {
-            const progress = boss.spiralBulletCount / 20;
-            this.shootSpiralAnimated(boss, progress, 2, Math.PI, 200, 3000);
-            this.playSound(500, 0.05);
-            boss.lastShot = time;
-            boss.spiralBulletCount++;
-          }
-        } else {
+        // Fase espiral: disparar toda la espiral de una vez (2 segundos de duración)
+        if (!boss.spiralFired) {
+          this.shootSpiral(boss, 20, 2, Math.PI, 0, 200, 3000, 100);
+          boss.spiralFired = true;
+        }
+        if (phaseTime >= 2000) {
           boss.attackPhase = 1;
           boss.phaseStartTime = time;
+          boss.spiralFired = false;
         }
       } else if (boss.attackPhase === 1) {
         // Pausa 1: 2 segundos
@@ -1030,22 +1028,23 @@ class GameScene extends Phaser.Scene {
         }
       } else if (boss.attackPhase === 2) {
         // Fase ondas: disparar 2 ondas de balas
-        if (phaseTime < 100) {
-          this.shootWave(boss, 50, 0, 200, 3000);
-          this.playSound(600, 0.2);
-        } else if (phaseTime >= 500 && phaseTime < 600) {
-          this.shootWave(boss, 50, 0, 200, 3000);
-          this.playSound(600, 0.2);
+        if (!boss.wave1Fired && phaseTime >= 0) {
+          this.shootWave(boss, 50, 0, 200, 3000, 20);
+          boss.wave1Fired = true;
+        } else if (!boss.wave2Fired && phaseTime >= 500) {
+          this.shootWave(boss, 50, 0, 200, 3000, 20);
+          boss.wave2Fired = true;
         } else if (phaseTime >= 2000) {
           boss.attackPhase = 3;
           boss.phaseStartTime = time;
+          boss.wave1Fired = false;
+          boss.wave2Fired = false;
         }
       } else if (boss.attackPhase === 3) {
         // Pausa 2: 2 segundos
         if (phaseTime >= 2000) {
           boss.attackPhase = 0;
           boss.phaseStartTime = time;
-          boss.spiralBulletCount = 0;
         }
       }
     } else if (boss.bossType === 'laser') {
@@ -1057,7 +1056,6 @@ class GameScene extends Phaser.Scene {
       // Shoot: 4 líneas rotatorias
       if (time - boss.lastShot > boss.shootDelay) {
         this.shootRotatingLines(boss, 4, 7, 100, boss.angle * Math.PI / 180, 200, 2000);
-        this.playSound(400, 0.12);
         boss.lastShot = time;
       }
     } else if (boss.bossType === 'phase' && !boss.hasChildren) {
@@ -1077,10 +1075,9 @@ class GameScene extends Phaser.Scene {
         boss.setVelocity(0);
       }
 
-      // Shoot: onda circular de 6 direcciones
+      // Shoot: onda circular de 6 direcciones desde el borde del boss
       if (time - boss.lastShot > boss.shootDelay) {
-        this.shootWave(boss, 6, 0, 200, 3000);
-        this.playSound(450, 0.12);
+        this.shootWave(boss, 6, 0, 200, 3000, 25);
         boss.lastShot = time;
       }
     }
@@ -1088,49 +1085,53 @@ class GameScene extends Phaser.Scene {
 
   // ===== SISTEMA MODULAR DE DISPAROS DE BOSSES =====
   // Este sistema permite crear patrones de disparo reutilizables.
-  // Para crear un nuevo boss o enemigo, simplemente llama a estas funciones
-  // con diferentes parámetros desde updateBoss() o updateEnemy().
+  // Cada función maneja todo el patrón completo, solo llama UNA VEZ por ataque.
   //
   // Ejemplos de uso:
-  // - Boss con espiral de 3 brazos: shootSpiralAnimated(boss, progress, 3, Math.PI*2, 250, 2500)
-  // - Enemigo con 8 direcciones: shootWave(enemy, 8, 0, 180, 2000)
-  // - Boss con 6 líneas: shootRotatingLines(boss, 6, 5, 120, 0, 220, 1800)
-  // - Espiral completa: shootSpiral(boss, 40, 4, Math.PI*4, 0, 200, 3000)
+  // - Espiral 2 brazos, 20 balas: shootSpiral(boss, 20, 2, Math.PI, 0, 200, 3000, 100)
+  // - Onda circular 50 balas: shootWave(boss, 50, 0, 200, 3000, 20)
+  // - Onda con delay: shootWaveDelayed(boss, 12, 0, 200, 2000, 50)
+  // - Líneas rotatorias: shootRotatingLines(boss, 4, 7, 100, angle, 200, 2000)
 
   // Función genérica para crear una bala desde una posición y ángulo
-  shootBossBullet(x, y, angle, speed, lifetime) {
+  shootBossBullet(x, y, angle, speed, lifetime, playSound = true) {
     const b = this.enemyBullets.create(x, y);
     b.setSize(10, 10);
     b.setVisible(false);
     b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
     this.time.delayedCall(lifetime, () => { if (b && b.active) b.destroy(); });
-    return b;
-  }
 
-  // Patrón: Disparo en espiral
-  // bulletCount: número de balas a disparar
-  // arms: número de brazos de la espiral
-  // rotation: ángulo total de rotación (en radianes)
-  // angleOffset: ángulo inicial (en radianes)
-  shootSpiral(source, bulletCount, arms, rotation, angleOffset, speed, lifetime) {
-    for (let i = 0; i < bulletCount; i++) {
-      const progress = i / bulletCount;
-      const baseAngle = angleOffset + (progress * rotation);
-
-      for (let arm = 0; arm < arms; arm++) {
-        const angle = baseAngle + (arm * Math.PI * 2 / arms);
-        this.shootBossBullet(source.x, source.y, angle, speed, lifetime);
-      }
+    // Sonido automático por cada bala
+    if (playSound) {
+      this.playSound(500, 0.1);
     }
+
+    return b;
   }
 
   // Patrón: Onda circular (explosión radial)
   // bulletCount: número de balas en el círculo
   // angleOffset: ángulo inicial de rotación (en radianes)
-  shootWave(source, bulletCount, angleOffset, speed, lifetime) {
+  // spawnRadius: radio desde el cual aparecen las balas (0 = centro, >0 = círculo)
+  shootWave(source, bulletCount, angleOffset, speed, lifetime, spawnRadius = 0) {
     for (let i = 0; i < bulletCount; i++) {
       const angle = angleOffset + (i * Math.PI * 2 / bulletCount);
-      this.shootBossBullet(source.x, source.y, angle, speed, lifetime);
+      const x = source.x + Math.cos(angle) * spawnRadius;
+      const y = source.y + Math.sin(angle) * spawnRadius;
+      this.shootBossBullet(x, y, angle, speed, lifetime);
+    }
+  }
+
+  // Patrón: Onda circular con delay entre balas (más visual)
+  // bulletCount: número de balas en el círculo
+  // angleOffset: ángulo inicial de rotación (en radianes)
+  // delayBetween: milisegundos entre cada bala
+  shootWaveDelayed(source, bulletCount, angleOffset, speed, lifetime, delayBetween = 50) {
+    for (let i = 0; i < bulletCount; i++) {
+      this.time.delayedCall(i * delayBetween, () => {
+        const angle = angleOffset + (i * Math.PI * 2 / bulletCount);
+        this.shootBossBullet(source.x, source.y, angle, speed, lifetime);
+      });
     }
   }
 
@@ -1150,15 +1151,25 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // Patrón: Espiral animada (para usar con tiempo)
-  // progress: valor entre 0 y 1 que indica el avance de la espiral
+  // Patrón: Espiral completa (maneja todo el disparo de una vez)
+  // bulletCount: número total de balas a disparar por brazo
   // arms: número de brazos de la espiral
-  // maxRotation: rotación máxima (en radianes)
-  shootSpiralAnimated(source, progress, arms, maxRotation, speed, lifetime) {
-    const angle = progress * maxRotation;
-    for (let arm = 0; arm < arms; arm++) {
-      const armAngle = angle + (arm * Math.PI * 2 / arms);
-      this.shootBossBullet(source.x, source.y, armAngle, speed, lifetime);
+  // rotation: ángulo total de rotación (en radianes)
+  // angleOffset: ángulo inicial (en radianes)
+  // delayBetween: milisegundos entre cada bala (para efecto visual)
+  shootSpiral(source, bulletCount, arms, rotation, angleOffset, speed, lifetime, delayBetween = 100) {
+    for (let i = 0; i < bulletCount; i++) {
+      const delay = i * delayBetween;
+      this.time.delayedCall(delay, () => {
+        if (!source.active) return; // Si el boss murió, no disparar
+        const progress = i / bulletCount;
+        const angle = angleOffset + (progress * rotation);
+
+        for (let arm = 0; arm < arms; arm++) {
+          const armAngle = angle + (arm * Math.PI * 2 / arms);
+          this.shootBossBullet(source.x, source.y, armAngle, speed, lifetime);
+        }
+      });
     }
   }
 
