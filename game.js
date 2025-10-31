@@ -2,12 +2,12 @@
 // Fight endless waves of enemies alone or with a friend!
 
 // ===== DEBUG & DIFFICULTY SETTINGS =====
-const DEBUG_MODE = true;           // Set to true for testing
+const DEBUG_MODE = false;           // Set to true for testing
 const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
-const DIFFICULTY = 0.5;            // Difficulty multiplier
+const DIFFICULTY = 1;            // Difficulty multiplier
 // Examples:
 // 0.1 = Very Easy (10% enemy health, 10% enemy count, faster shooting)
 // 0.5 = Easy (50% enemy health, 50% enemy count)
@@ -84,25 +84,25 @@ class MenuScene extends Phaser.Scene {
 // ENEMY TYPE DEFINITIONS
 const ENEMY_TYPES = {
   triangle: {
-    health: 30,
+    health: 20,
     speed: 80,
-    shootDelay: 2000,
+    shootDelay: 2500,
     color: 0xff6600,
     points: 10,
     size: 30,
     rotates: true
   },
   square: {
-    health: 50,
+    health: 30,
     speed: 60,
-    shootDelay: 3000,
+    shootDelay: 3500,
     color: 0xff00ff,
     points: 20,
     size: 30,
     rotates: false
   },
   pentagon: {
-    health: 80,
+    health: 50,
     speed: 50,
     shootDelay: 5000,
     color: 0x00ffff,
@@ -112,7 +112,7 @@ const ENEMY_TYPES = {
     minWave: 3 // Aparece desde wave 3
   },
   hexagon: {
-    health: 120,
+    health: 70,
     speed: 30,
     shootDelay: 300, // Dispara cada 300ms durante 6 segundos
     color: 0x00ff88,
@@ -122,7 +122,7 @@ const ENEMY_TYPES = {
     minWave: 7
   },
   octagon: {
-    health: 150,
+    health: 90,
     speed: 55,
     shootDelay: 3000,
     color: 0xaa00ff,
@@ -132,7 +132,7 @@ const ENEMY_TYPES = {
     minWave: 12
   },
   spinner: {
-    health: 180,
+    health: 100,
     speed: 50,
     shootDelay: 500, // Dispara cada 500ms
     color: 0xff66aa,
@@ -298,7 +298,7 @@ const MAP_LAYOUTS = [
     {x: 600, y: 150, w: 60, h: 60},
     {x: 200, y: 450, w: 60, h: 60},
     {x: 600, y: 450, w: 60, h: 60},
-    {x: 400, y: 300, w: 80, h: 80}
+    {x: 400, y: 300, w: 40, h: 40}
   ],
   // Map 2 (waves 11-19)
   [
@@ -1005,7 +1005,7 @@ class GameScene extends Phaser.Scene {
       // Balas especiales
       const bulletCount = player.specialBullets || 1;
       const spread = bulletCount > 1 ? 0.3 : 0;
-      const baseDamage = 25;
+      const baseDamage = 30;
       const damage = Math.floor(baseDamage * player.damageMultiplier);
 
       // Determinar elemento si tiene algún powerup elemental
@@ -1147,33 +1147,62 @@ class GameScene extends Phaser.Scene {
     else if (side === 2) { x = 30; y = 300; }     // Left
     else { x = 770; y = 300; }                     // Right
 
-    // Choose enemy type based on wave progression
+    // Sistema de pesos que evoluciona con las rondas
     let typeName;
-    const availableTypes = ['triangle']; // Always available
+    const weights = {
+      triangle: 100, // Siempre presente
+      square: 0,
+      pentagon: 0,
+      hexagon: 0,
+      octagon: 0,
+      spinner: 0
+    };
 
-    // Wave 3+: Add square and pentagon
-    if (this.wave >= 3) {
-      availableTypes.push('square');
-      availableTypes.push('pentagon');
+    // Introducir square gradualmente desde ronda 2
+    if (this.wave >= 2) {
+      weights.square = Math.min(30, 10 + (this.wave - 2) * 3); // 10% en ronda 2, sube gradualmente hasta 30%
+      weights.triangle = Math.max(40, 100 - weights.square); // Triangle baja gradualmente pero nunca menos de 40%
     }
 
-    // Wave 7+: Add hexagon
+    // Introducir pentagon desde ronda 4
+    if (this.wave >= 4) {
+      weights.pentagon = Math.min(25, 5 + (this.wave - 4) * 2); // 5% en ronda 4, sube hasta 25%
+      const total = weights.triangle + weights.square + weights.pentagon;
+      // Redistribuir triangle y square proporcionalmente
+      weights.triangle = Math.max(40, 100 - weights.square - weights.pentagon);
+      weights.square = Math.max(15, weights.square - (weights.pentagon / 2));
+    }
+
+    // Introducir hexagon desde ronda 7
     if (this.wave >= 7) {
-      availableTypes.push('hexagon');
+      weights.hexagon = Math.min(20, 5 + (this.wave - 7) * 2); // 5% en ronda 7, sube hasta 20%
+      weights.triangle = Math.max(40, weights.triangle - weights.hexagon / 2);
+      weights.square = Math.max(15, weights.square - weights.hexagon / 4);
     }
 
-    // Wave 12+: Add octagon
+    // Introducir octagon desde ronda 12
     if (this.wave >= 12) {
-      availableTypes.push('octagon');
+      weights.octagon = Math.min(15, 3 + (this.wave - 12) * 1.5); // 3% en ronda 12, sube hasta 15%
+      weights.triangle = Math.max(35, weights.triangle - weights.octagon / 2);
     }
 
-    // Wave 16+: Add spinner
+    // Introducir spinner desde ronda 16
     if (this.wave >= 16) {
-      availableTypes.push('spinner');
+      weights.spinner = Math.min(10, 2 + (this.wave - 16) * 1); // 2% en ronda 16, sube hasta 10%
+      weights.triangle = Math.max(30, weights.triangle - weights.spinner / 2);
     }
 
-    // Random selection from available types
-    typeName = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+    // Selección ponderada
+    const totalWeight = Object.values(weights).reduce((sum, w) => sum + w, 0);
+    let random = Math.random() * totalWeight;
+
+    for (const [type, weight] of Object.entries(weights)) {
+      random -= weight;
+      if (random <= 0) {
+        typeName = type;
+        break;
+      }
+    }
 
     const typeData = ENEMY_TYPES[typeName];
     const enemy = this.enemies.create(x, y, null);
@@ -1293,7 +1322,7 @@ class GameScene extends Phaser.Scene {
       }
       enemy.shootingCycle += delta;
 
-      const cycleTime = 8000; // 6s shooting + 2s pause
+      const cycleTime = 9000; // 6s shooting + 2s pause
       const shootingDuration = 6000;
       const cyclePosition = enemy.shootingCycle % cycleTime;
 
@@ -1626,7 +1655,6 @@ class GameScene extends Phaser.Scene {
 
     // Marcar este enemigo como golpeado por esta bala
     bullet.hitEnemies.add(enemy);
-
     const damage = bullet.damage || 10;
 
     // Aplicar efectos elementales (obtener duración del dueño de la bala)
