@@ -339,6 +339,13 @@ const POWERUP_TYPES = {
     cooldownPenalty: 0,
     description: 'Burn Enemies'
   },
+  electricBullets: {
+    name: 'Electric Bullets',
+    rarity: 'rare',
+    color: 0xffff00,
+    cooldownPenalty: 0,
+    description: 'Stun Enemies'
+  },
 
   // ESPECIALES
   heart: {
@@ -523,9 +530,10 @@ class GameScene extends Phaser.Scene {
     this.p1.homingStrength = this.p1State ? this.p1State.homingStrength : 0;
     this.p1.bounceCount = this.p1State ? this.p1State.bounceCount : 0;
     this.p1.hasBackShot = this.p1State ? this.p1State.hasBackShot : false;
-    this.p1.iceBulletCount = this.p1State ? this.p1State.iceBulletCount : 0;
-    this.p1.fireBulletCount = this.p1State ? this.p1State.fireBulletCount : 0;
-    this.p1.elementalBulletCounter = 0; // Para rastrear qué bala toca
+    // Sistema elemental: duraciones (cada powerup suma 1s)
+    this.p1.iceDuration = this.p1State ? this.p1State.iceDuration : 0; // 4s base + 1s por powerup
+    this.p1.fireDuration = this.p1State ? this.p1State.fireDuration : 0; // 3s base + 1s por powerup
+    this.p1.electricDuration = this.p1State ? this.p1State.electricDuration : 0; // 2s base + 1s por powerup
 
     this.players = [this.p1];
 
@@ -551,9 +559,10 @@ class GameScene extends Phaser.Scene {
       this.p2.homingStrength = this.p2State ? this.p2State.homingStrength : 0;
       this.p2.bounceCount = this.p2State ? this.p2State.bounceCount : 0;
       this.p2.hasBackShot = this.p2State ? this.p2State.hasBackShot : false;
-      this.p2.iceBulletCount = this.p2State ? this.p2State.iceBulletCount : 0;
-      this.p2.fireBulletCount = this.p2State ? this.p2State.fireBulletCount : 0;
-      this.p2.elementalBulletCounter = 0;
+      // Sistema elemental: duraciones (cada powerup suma 1s)
+      this.p2.iceDuration = this.p2State ? this.p2State.iceDuration : 0;
+      this.p2.fireDuration = this.p2State ? this.p2State.fireDuration : 0;
+      this.p2.electricDuration = this.p2State ? this.p2State.electricDuration : 0;
 
       this.players.push(this.p2);
     }
@@ -753,6 +762,10 @@ class GameScene extends Phaser.Scene {
     this.playerBullets.children.entries.forEach(b => {
       this.graphics.fillStyle(b.color);
       this.graphics.fillCircle(b.x, b.y, 4);
+      // Guardar velocidad previa para rebotes (Phaser pone velocidad en 0 durante colisión)
+      if (b.body && (b.body.velocity.x !== 0 || b.body.velocity.y !== 0)) {
+        b.prevVelocity = { x: b.body.velocity.x, y: b.body.velocity.y };
+      }
     });
 
     this.playerSpecialBullets.children.entries.forEach(b => {
@@ -760,6 +773,10 @@ class GameScene extends Phaser.Scene {
       this.graphics.fillCircle(b.x, b.y, 8);
       this.graphics.lineStyle(2, b.color, 0.5);
       this.graphics.strokeCircle(b.x, b.y, 12);
+      // Guardar velocidad previa para rebotes
+      if (b.body && (b.body.velocity.x !== 0 || b.body.velocity.y !== 0)) {
+        b.prevVelocity = { x: b.body.velocity.x, y: b.body.velocity.y };
+      }
     });
 
     this.enemyBullets.children.entries.forEach(b => {
@@ -774,23 +791,83 @@ class GameScene extends Phaser.Scene {
 
       // Dibujar efectos visuales de estados elementales
       if (e.isFrozen) {
-        // Efecto visual de hielo (borde azul brillante)
-        this.graphics.lineStyle(3, 0x00ccff, 0.8);
-        this.graphics.strokeCircle(e.x, e.y, 25);
-        this.graphics.lineStyle(1, 0xffffff, 0.6);
-        this.graphics.strokeCircle(e.x, e.y, 28);
+        // Efecto visual de hielo: rombos celestes transparentes
+        this.graphics.fillStyle(0x00ccff, 0.5);
+        this.graphics.save();
+        this.graphics.translateCanvas(e.x, e.y);
+
+        // Rombos en diferentes posiciones
+        for (let i = 0; i < 4; i++) {
+          const angle = (i * Math.PI / 2) + (time * 0.001);
+          const radius = 20 + Math.sin(time * 0.005 + i) * 5;
+          const rx = Math.cos(angle) * radius;
+          const ry = Math.sin(angle) * radius;
+
+          this.graphics.fillTriangle(rx, ry - 5, rx - 4, ry, rx, ry + 5);
+          this.graphics.fillTriangle(rx, ry - 5, rx + 4, ry, rx, ry + 5);
+        }
+
+        this.graphics.restore();
       }
 
       if (e.isBurning) {
-        // Efecto visual de fuego (partículas rojas/naranjas)
-        const burnPulse = Math.sin(time * 0.02) * 0.3 + 0.7;
-        this.graphics.fillStyle(0xff4400, burnPulse);
-        this.graphics.fillCircle(e.x - 10, e.y - 15, 4);
-        this.graphics.fillCircle(e.x + 8, e.y - 12, 3);
-        this.graphics.fillCircle(e.x, e.y + 12, 5);
-        this.graphics.fillStyle(0xff8800, burnPulse * 0.7);
-        this.graphics.fillCircle(e.x - 5, e.y - 18, 3);
-        this.graphics.fillCircle(e.x + 12, e.y - 8, 4);
+        // Efecto visual de fuego: partículas rojas que suben
+        const burnPhase = time * 0.005;
+        this.graphics.fillStyle(0xff4400, 0.8);
+
+        for (let i = 0; i < 6; i++) {
+          const yOffset = ((burnPhase + i * 0.3) % 1.0) * -25;
+          const xOffset = Math.sin(burnPhase * 2 + i) * 8;
+          const size = 3 + Math.sin(burnPhase + i) * 2;
+          this.graphics.fillCircle(e.x + xOffset, e.y + 15 + yOffset, size);
+        }
+
+        this.graphics.fillStyle(0xff8800, 0.6);
+        for (let i = 0; i < 4; i++) {
+          const yOffset = ((burnPhase * 1.2 + i * 0.25) % 1.0) * -22;
+          const xOffset = Math.cos(burnPhase * 2 + i) * 6;
+          this.graphics.fillCircle(e.x + xOffset, e.y + 12 + yOffset, 2);
+        }
+      }
+
+      if (e.isElectrocuted) {
+        // Efecto visual eléctrico: rayos amarillos
+        const sparkPhase = time * 0.02;
+        this.graphics.lineStyle(2, 0xffff00, 0.9);
+
+        // Rayos que rodean al enemigo
+        for (let i = 0; i < 5; i++) {
+          const angle = (sparkPhase + i * 0.4) * Math.PI * 2;
+          const radius = 18 + Math.sin(sparkPhase * 3 + i) * 8;
+          const x1 = e.x + Math.cos(angle) * radius;
+          const y1 = e.y + Math.sin(angle) * radius;
+
+          // Rayos zigzag
+          const segments = 3;
+          let prevX = x1;
+          let prevY = y1;
+          for (let j = 1; j <= segments; j++) {
+            const targetAngle = angle + Math.PI + (Math.random() - 0.5) * 0.5;
+            const targetRadius = radius * (1 - j / segments);
+            const newX = e.x + Math.cos(targetAngle) * targetRadius;
+            const newY = e.y + Math.sin(targetAngle) * targetRadius;
+            this.graphics.lineBetween(prevX, prevY, newX, newY);
+            prevX = newX;
+            prevY = newY;
+          }
+        }
+
+        // Chispas pequeñas
+        this.graphics.fillStyle(0xffff00, 0.8);
+        for (let i = 0; i < 8; i++) {
+          const angle = (sparkPhase * 2 + i * 0.8) * Math.PI * 2;
+          const radius = 22;
+          this.graphics.fillCircle(
+            e.x + Math.cos(angle) * radius,
+            e.y + Math.sin(angle) * radius,
+            2
+          );
+        }
       }
     });
 
@@ -955,6 +1032,18 @@ class GameScene extends Phaser.Scene {
       const baseDamage = 25;
       const damage = Math.floor(baseDamage * player.damageMultiplier);
 
+      // Determinar elemento si tiene algún powerup elemental
+      let elementalType = null;
+      const elementals = [];
+      if (player.iceDuration > 0) elementals.push('ice');
+      if (player.fireDuration > 0) elementals.push('fire');
+      if (player.electricDuration > 0) elementals.push('electric');
+
+      if (elementals.length > 0) {
+        // Elegir uno al azar si tiene múltiples
+        elementalType = elementals[Math.floor(Math.random() * elementals.length)];
+      }
+
       for (let i = 0; i < bulletCount; i++) {
         const offset = (i - (bulletCount - 1) / 2) * spread;
         const spreadAngle = angle + offset;
@@ -965,13 +1054,22 @@ class GameScene extends Phaser.Scene {
         b.setSize(16, 16);
         b.setVisible(false);
         b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
-        b.color = color;
         b.damage = damage;
         b.pierce = player.pierce;
         b.bounceCount = player.bounceCount;
         b.bounces = 0;
         b.homingStrength = player.homingStrength;
         b.owner = player;
+
+        // Aplicar elemento y color
+        if (elementalType) {
+          b.elementalType = elementalType;
+          if (elementalType === 'ice') b.color = 0x00ccff;
+          else if (elementalType === 'fire') b.color = 0xff4400;
+          else if (elementalType === 'electric') b.color = 0xffff00;
+        } else {
+          b.color = color;
+        }
 
         this.time.delayedCall(3000, () => {
           if (b && b.active) b.destroy();
@@ -988,13 +1086,22 @@ class GameScene extends Phaser.Scene {
         b.setSize(16, 16);
         b.setVisible(false);
         b.setVelocity(Math.cos(backAngle) * speed, Math.sin(backAngle) * speed);
-        b.color = color;
         b.damage = damage;
         b.pierce = player.pierce;
         b.bounceCount = player.bounceCount;
         b.bounces = 0;
         b.homingStrength = player.homingStrength;
         b.owner = player;
+
+        // Aplicar mismo elemento que las balas frontales
+        if (elementalType) {
+          b.elementalType = elementalType;
+          if (elementalType === 'ice') b.color = 0x00ccff;
+          else if (elementalType === 'fire') b.color = 0xff4400;
+          else if (elementalType === 'electric') b.color = 0xffff00;
+        } else {
+          b.color = color;
+        }
 
         this.time.delayedCall(3000, () => {
           if (b && b.active) b.destroy();
@@ -1026,27 +1133,6 @@ class GameScene extends Phaser.Scene {
         b.bounces = 0;
         b.homingStrength = player.homingStrength;
         b.owner = player;
-
-        // Sistema elemental: X de cada (5 + total - 1) balas tiene elemento
-        const totalElemental = player.iceBulletCount + player.fireBulletCount;
-        if (totalElemental > 0) {
-          player.elementalBulletCounter++;
-          const denominator = 5 + totalElemental - 1;
-
-          if (player.elementalBulletCounter >= denominator) {
-            player.elementalBulletCounter = 0; // Reset counter
-
-            // Decidir qué elemento aplicar basado en proporción
-            const rand = Math.random() * totalElemental;
-            if (rand < player.iceBulletCount) {
-              b.elementalType = 'ice';
-              b.color = 0x00ccff; // Color azul hielo
-            } else {
-              b.elementalType = 'fire';
-              b.color = 0xff4400; // Color rojo fuego
-            }
-          }
-        }
 
         this.time.delayedCall(2000, () => {
           if (b && b.active) b.destroy();
@@ -1107,6 +1193,18 @@ class GameScene extends Phaser.Scene {
   }
 
   updateEnemy(enemy, time, delta) {
+    // Electrocuted: paralizado completamente
+    if (enemy.isElectrocuted) {
+      const elapsed = time - enemy.electrocutedTime;
+      if (elapsed < enemy.electrocutedDuration) {
+        // Paralizado: no movimiento, no disparo
+        enemy.setVelocity(0);
+        return; // Salir completamente de updateEnemy
+      } else {
+        enemy.isElectrocuted = false; // Termina efecto
+      }
+    }
+
     // Manejo de estados elementales
     // Frozen: reducir velocidad y cadencia de disparo
     let speedMultiplier = 1.0;
@@ -1431,6 +1529,11 @@ class GameScene extends Phaser.Scene {
   }
 
   handleBulletWallCollision(bullet, wall) {
+    // If bullet is in ignore collision state, don't process
+    if (bullet.ignoreWallCollision) {
+      return false; // Return false to prevent collision
+    }
+
     // Check if bullet has bounce capability
     if (bullet.bounceCount && bullet.bounceCount > 0) {
       // Track how many times this bullet has bounced
@@ -1439,40 +1542,68 @@ class GameScene extends Phaser.Scene {
       if (bullet.bounces < bullet.bounceCount) {
         bullet.bounces++;
 
-        // Reflect velocity based on wall orientation
-        // Determine if wall is horizontal or vertical based on dimensions
-        const wallWidth = wall.body.width;
-        const wallHeight = wall.body.height;
+        // Phaser pone la velocidad en 0 durante colisión, usar velocidad previa
+        // Guardar velocidad previa si existe, sino usar un valor por defecto
+        let speed = 400; // velocidad por defecto de las balas
+        if (bullet.prevVelocity) {
+          speed = Math.sqrt(bullet.prevVelocity.x ** 2 + bullet.prevVelocity.y ** 2);
+        }
 
-        // Calculate reflection
-        if (wallWidth > wallHeight) {
-          // Horizontal wall (top/bottom) - reflect Y velocity
-          bullet.body.velocity.y *= -1;
+        // Determinar la dirección del rebote basándose en la posición relativa
+        const dx = bullet.x - wall.x;
+        const dy = bullet.y - wall.y;
 
-          // Move bullet away from wall to prevent sticking
-          if (bullet.y < wall.y) {
-            bullet.y = wall.y - wall.body.halfHeight - bullet.body.halfHeight - 2;
+        // Normalizar por las dimensiones de la pared
+        const normalizedDx = Math.abs(dx) / (wall.body.halfWidth + bullet.body.halfWidth);
+        const normalizedDy = Math.abs(dy) / (wall.body.halfHeight + bullet.body.halfHeight);
+
+        // Calcular nueva velocidad basada en la dirección de colisión
+        let newVelX, newVelY;
+
+        if (normalizedDx > normalizedDy) {
+          // Colisión lateral (izquierda/derecha) - reflejar X
+          newVelX = bullet.prevVelocity ? -bullet.prevVelocity.x : (dx > 0 ? speed : -speed);
+          newVelY = bullet.prevVelocity ? bullet.prevVelocity.y : 0;
+
+          // Empujar la bala lejos de la pared
+          if (dx < 0) {
+            bullet.x = wall.x - wall.body.halfWidth - bullet.body.halfWidth - 10;
           } else {
-            bullet.y = wall.y + wall.body.halfHeight + bullet.body.halfHeight + 2;
+            bullet.x = wall.x + wall.body.halfWidth + bullet.body.halfWidth + 10;
           }
         } else {
-          // Vertical wall (left/right) - reflect X velocity
-          bullet.body.velocity.x *= -1;
+          // Colisión vertical (arriba/abajo) - reflejar Y
+          newVelX = bullet.prevVelocity ? bullet.prevVelocity.x : 0;
+          newVelY = bullet.prevVelocity ? -bullet.prevVelocity.y : (dy > 0 ? speed : -speed);
 
-          // Move bullet away from wall to prevent sticking
-          if (bullet.x < wall.x) {
-            bullet.x = wall.x - wall.body.halfWidth - bullet.body.halfWidth - 2;
+          // Empujar la bala lejos de la pared
+          if (dy < 0) {
+            bullet.y = wall.y - wall.body.halfHeight - bullet.body.halfHeight - 10;
           } else {
-            bullet.x = wall.x + wall.body.halfWidth + bullet.body.halfWidth + 2;
+            bullet.y = wall.y + wall.body.halfHeight + bullet.body.halfHeight + 10;
           }
         }
 
-        // Reset hitEnemies on bounce (permite volver a golpear enemigos después del rebote)
+        // Aplicar la nueva velocidad con setVelocity para asegurar que se aplique
+        bullet.body.setVelocity(newVelX, newVelY);
+
+        // CRITICAL: Mark bullet to ignore wall collisions temporarily
+        bullet.ignoreWallCollision = true;
+
+        // Re-enable collision after bullet has moved away (150ms should be enough)
+        this.time.delayedCall(150, () => {
+          if (bullet && bullet.active) {
+            bullet.ignoreWallCollision = false;
+          }
+        });
+
+        // Reset hitEnemies on bounce
         if (bullet.hitEnemies) {
           bullet.hitEnemies.clear();
         }
 
-        this.playSound(300, 0.05); // Bounce sound
+        this.playSound(300, 0.05);
+
         return; // Don't destroy
       }
     }
@@ -1497,18 +1628,28 @@ class GameScene extends Phaser.Scene {
 
     const damage = bullet.damage || 10;
 
-    // Aplicar efectos elementales
-    if (bullet.elementalType === 'ice') {
-      // Congelar enemigo
-      enemy.isFrozen = true;
-      enemy.frozenTime = this.time.now;
-      enemy.frozenDuration = 3000; // 3 segundos congelado
-    } else if (bullet.elementalType === 'fire') {
-      // Quemar enemigo
-      enemy.isBurning = true;
-      enemy.burnStartTime = this.time.now;
-      enemy.burnDuration = 5000; // 5 segundos quemándose
-      enemy.burnTickTime = this.time.now;
+    // Aplicar efectos elementales (obtener duración del dueño de la bala)
+    // Los jefes tienen duraciones reducidas a la mitad
+    if (bullet.elementalType && bullet.owner) {
+      const durationMultiplier = enemy.isBoss ? 0.5 : 1.0;
+
+      if (bullet.elementalType === 'ice') {
+        // Congelar enemigo
+        enemy.isFrozen = true;
+        enemy.frozenTime = this.time.now;
+        enemy.frozenDuration = bullet.owner.iceDuration * durationMultiplier;
+      } else if (bullet.elementalType === 'fire') {
+        // Quemar enemigo
+        enemy.isBurning = true;
+        enemy.burnStartTime = this.time.now;
+        enemy.burnDuration = bullet.owner.fireDuration * durationMultiplier;
+        enemy.burnTickTime = this.time.now;
+      } else if (bullet.elementalType === 'electric') {
+        // Electrocutar enemigo (paralizar completamente)
+        enemy.isElectrocuted = true;
+        enemy.electrocutedTime = this.time.now;
+        enemy.electrocutedDuration = bullet.owner.electricDuration * durationMultiplier;
+      }
     }
 
     // Pierce: solo destruir si ya penetró suficientes enemigos
@@ -1733,15 +1874,71 @@ class GameScene extends Phaser.Scene {
   }
 
   updateBoss(boss, time, delta) {
+    // Electrocuted: paralizado completamente
+    if (boss.isElectrocuted) {
+      const elapsed = time - boss.electrocutedTime;
+      if (elapsed < boss.electrocutedDuration) {
+        // Paralizado: no movimiento, no disparo
+        boss.setVelocity(0);
+        return; // Salir completamente de updateBoss
+      } else {
+        boss.isElectrocuted = false; // Termina efecto
+      }
+    }
+
+    // Manejo de estados elementales
+    let speedMultiplier = 1.0;
+    let shootDelayMultiplier = 1.0;
+
+    if (boss.isFrozen) {
+      const elapsed = time - boss.frozenTime;
+      if (elapsed < boss.frozenDuration) {
+        speedMultiplier = 0.3; // 70% más lento
+        shootDelayMultiplier = 2.0; // Dispara 2x más lento
+      } else {
+        boss.isFrozen = false; // Termina efecto
+      }
+    }
+
+    // Burning: daño periódico
+    if (boss.isBurning) {
+      const elapsed = time - boss.burnStartTime;
+      if (elapsed < boss.burnDuration) {
+        // Aplicar daño cada 500ms
+        if (time - boss.burnTickTime > 500) {
+          boss.health -= 2; // 2 daño por tick
+          boss.burnTickTime = time;
+          this.playSound(200, 0.03);
+
+          if (boss.health <= 0) {
+            const deathPosition = { x: boss.x, y: boss.y };
+            this.lastEnemyPosition = deathPosition;
+            const typeData = BOSS_TYPES[boss.bossType];
+            this.score += typeData.points;
+            this.scoreText.setText('Score: ' + this.score);
+            this.bossActive = false;
+            this.openDoors();
+            this.playSound(600, 0.3);
+            this.trySpawnPowerup(true, deathPosition);
+            boss.destroy();
+            return; // Importante: salir de updateBoss
+          }
+        }
+      } else {
+        boss.isBurning = false; // Termina efecto
+      }
+    }
+
     if (boss.bossType === 'pattern') {
-      // Slow circular movement
+      // Slow circular movement (afectado por frozen)
       const angle = time * 0.0005;
       const radius = 100;
       const centerX = 400;
       const centerY = 300;
+      const baseSpeed = 2 * speedMultiplier; // Aplicar multiplicador de velocidad
       boss.setVelocity(
-        (Math.cos(angle) * radius - (boss.x - centerX)) * 2,
-        (Math.sin(angle) * radius - (boss.y - centerY)) * 2
+        (Math.cos(angle) * radius - (boss.x - centerX)) * baseSpeed,
+        (Math.sin(angle) * radius - (boss.y - centerY)) * baseSpeed
       );
 
       // Manejar fases del ataque
@@ -1787,18 +1984,19 @@ class GameScene extends Phaser.Scene {
         }
       }
     } else if (boss.bossType === 'laser') {
-      // Rotate constantly
-      boss.angle += delta * 0.05;
+      // Rotate constantly (afectado por frozen)
+      boss.angle += delta * 0.05 * speedMultiplier;
       // Stay in center
       boss.setVelocity((400 - boss.x) * 2, (300 - boss.y) * 2);
 
-      // Shoot: 4 líneas rotatorias
-      if (time - boss.lastShot > boss.shootDelay) {
+      // Shoot: 4 líneas rotatorias (afectado por frozen)
+      const effectiveShootDelay = boss.shootDelay * shootDelayMultiplier;
+      if (time - boss.lastShot > effectiveShootDelay) {
         this.shootRotatingLines(boss, 4, 7, 100, boss.angle * Math.PI / 180, 200, 2000);
         boss.lastShot = time;
       }
     } else if (boss.bossType === 'phase' && !boss.hasChildren) {
-      // Move towards nearest player
+      // Move towards nearest player (afectado por frozen)
       let target = this.p1;
       if (this.numPlayers === 2) {
         const d1 = Phaser.Math.Distance.Between(boss.x, boss.y, this.p1.x, this.p1.y);
@@ -1809,13 +2007,15 @@ class GameScene extends Phaser.Scene {
       const dy = target.y - boss.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
       if (dist > 100) {
-        boss.setVelocity(dx/dist * boss.speed, dy/dist * boss.speed);
+        const effectiveSpeed = boss.speed * speedMultiplier;
+        boss.setVelocity(dx/dist * effectiveSpeed, dy/dist * effectiveSpeed);
       } else {
         boss.setVelocity(0);
       }
 
-      // Shoot: onda circular de 6 direcciones desde el borde del boss
-      if (time - boss.lastShot > boss.shootDelay) {
+      // Shoot: onda circular de 6 direcciones desde el borde del boss (afectado por frozen)
+      const effectiveShootDelay = boss.shootDelay * shootDelayMultiplier;
+      if (time - boss.lastShot > effectiveShootDelay) {
         this.shootWave(boss, 6, 0, 200, 3000, 25);
         boss.lastShot = time;
       }
@@ -1827,7 +2027,7 @@ class GameScene extends Phaser.Scene {
   trySpawnPowerup(isBoss, position) {
     if (isBoss) {
       // Boss: 50% maxHeart, 50% powerup raro aleatorio
-      const bossDrops = ['maxHeart', 'spreadShot', 'homingBullets', 'bounce', 'iceBullets', 'fireBullets'];
+      const bossDrops = ['maxHeart', 'spreadShot', 'homingBullets', 'bounce', 'iceBullets', 'fireBullets', 'electricBullets'];
       const randomDrop = bossDrops[Math.floor(Math.random() * bossDrops.length)];
       this.spawnPowerup(position, randomDrop);
       return;
@@ -1835,10 +2035,10 @@ class GameScene extends Phaser.Scene {
 
     // Waves normales: SIN DAÑO primero
     const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'shield', 'moreDamage', 'backShot'];
-    const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets'];
+        const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets']; //['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets'];
     if (!this.damageTakenThisWave) {
       // 1. Primero: 10% chance de powerup RARO
-      if (Math.random() < 0.10) {
+      if (Math.random() < 1) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
@@ -1858,7 +2058,7 @@ class GameScene extends Phaser.Scene {
       }
     } else {
       // CON DAÑO: Solo 10% de powerup común
-      if (Math.random() < 0.10) {
+      if (Math.random() < 1) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
@@ -1948,19 +2148,30 @@ class GameScene extends Phaser.Scene {
         break;
 
       case 'iceBullets':
-        player.iceBulletCount++;
-        // Calcular probabilidad: X de (5 + total elemental powers - 1)
-        const iceTotal = player.iceBulletCount + player.fireBulletCount;
-        const iceDenom = 5 + iceTotal - 1;
-        message = `${powerupData.description} (${player.iceBulletCount}/${iceDenom})`;
+        if (player.iceDuration === 0) {
+          player.iceDuration = 4000; // 4s base
+        } else {
+          player.iceDuration += 1000; // +1s por cada powerup adicional
+        }
+        message = `${powerupData.description} (${player.iceDuration / 1000}s)`;
         break;
 
       case 'fireBullets':
-        player.fireBulletCount++;
-        // Calcular probabilidad: X de (5 + total elemental powers - 1)
-        const fireTotal = player.iceBulletCount + player.fireBulletCount;
-        const fireDenom = 5 + fireTotal - 1;
-        message = `${powerupData.description} (${player.fireBulletCount}/${fireDenom})`;
+        if (player.fireDuration === 0) {
+          player.fireDuration = 3000; // 3s base
+        } else {
+          player.fireDuration += 1000; // +1s por cada powerup adicional
+        }
+        message = `${powerupData.description} (${player.fireDuration / 1000}s)`;
+        break;
+
+      case 'electricBullets':
+        if (player.electricDuration === 0) {
+          player.electricDuration = 2000; // 2s base
+        } else {
+          player.electricDuration += 1000; // +1s por cada powerup adicional
+        }
+        message = `${powerupData.description} (${player.electricDuration / 1000}s)`;
         break;
 
       case 'heart':
@@ -2219,6 +2430,38 @@ class GameScene extends Phaser.Scene {
       this.graphics.translateCanvas(powerup.x, powerup.y);
       this.graphics.strokeCircle(0, 0, 14);
       this.graphics.restore();
+    } else if (powerup.type === 'electricBullets') {
+      // Rayo eléctrico (amarillo brillante)
+      this.graphics.lineStyle(3, 0xffff00, pulse);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+
+      // Rayo zigzag vertical
+      this.graphics.lineBetween(0, -12, -4, -4);
+      this.graphics.lineBetween(-4, -4, 4, 2);
+      this.graphics.lineBetween(4, 2, -2, 8);
+      this.graphics.lineBetween(-2, 8, 0, 12);
+
+      this.graphics.restore();
+
+      // Chispas alrededor
+      this.graphics.fillStyle(0xffff00, pulse);
+      const sparkCount = 6;
+      for (let i = 0; i < sparkCount; i++) {
+        const angle = (i / sparkCount) * Math.PI * 2 + (time * 0.005);
+        const radius = 16;
+        this.graphics.fillCircle(
+          powerup.x + Math.cos(angle) * radius,
+          powerup.y + Math.sin(angle) * radius,
+          2
+        );
+      }
+
+      this.graphics.lineStyle(2, 0xffffff, pulse * 0.7);
+      this.graphics.save();
+      this.graphics.translateCanvas(powerup.x, powerup.y);
+      this.graphics.strokeCircle(0, 0, 14);
+      this.graphics.restore();
     }
   }
 
@@ -2448,8 +2691,9 @@ class GameScene extends Phaser.Scene {
       homingStrength: player.homingStrength,
       bounceCount: player.bounceCount,
       hasBackShot: player.hasBackShot,
-      iceBulletCount: player.iceBulletCount,
-      fireBulletCount: player.fireBulletCount
+      iceDuration: player.iceDuration,
+      fireDuration: player.fireDuration,
+      electricDuration: player.electricDuration
     };
   }
 
