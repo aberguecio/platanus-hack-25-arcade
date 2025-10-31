@@ -342,6 +342,7 @@ class GameScene extends Phaser.Scene {
     this.particles = []; // Inicializar sistema de partículas
     this.doorsOpen = false;
     this.transitioning = false;
+    this.waitingForNextWave = false; // Bandera para evitar múltiples llamadas a startNextWave
     this.lastEnemyPosition = null;
 
     // Guardar estado de jugadores para restaurar después
@@ -885,13 +886,16 @@ class GameScene extends Phaser.Scene {
     }
 
     // Check wave complete (pero no si las puertas están abiertas esperando transición)
-    if (this.enemiesThisWave >= this.enemiesPerWave && this.enemies.children.size === 0 && !this.bossActive && !this.doorsOpen) {
-      // Efectos de fin de ronda
-      this.playSound(600, 0.25);
-      this.cameras.main.flash(300, 255, 255, 255);
-
+    if (this.enemiesThisWave >= this.enemiesPerWave && this.enemies.children.size === 0 && !this.bossActive && !this.doorsOpen && !this.waitingForNextWave) {
+      this.waitingForNextWave = true; // Evitar múltiples llamadas
       this.trySpawnPowerup(false, this.lastEnemyPosition); // false = no es boss
-      this.startNextWave();
+      this.playSound(600, 0.25);
+
+      // Pausa de 2 segundos antes de la siguiente ronda
+      this.time.delayedCall(2000, () => {
+        this.waitingForNextWave = false;
+        this.startNextWave();
+      });
     }
 
     // Update UI (corazones)
@@ -1749,11 +1753,7 @@ class GameScene extends Phaser.Scene {
     // Reset damage tracking for new wave
     this.damageTakenThisWave = false;
 
-    // Efectos de inicio de ronda
-    this.playSound(700, 0.2);
-    this.cameras.main.flash(200, 0, 255, 0);
-
-    // Mostrar mensaje de nueva ronda
+    // Mostrar mensaje de nueva ronda (solo texto)
     const waveMsg = this.add.text(400, 100, 'WAVE ' + this.wave, {
       fontSize: '48px',
       fontFamily: 'Arial',
@@ -2115,7 +2115,7 @@ class GameScene extends Phaser.Scene {
         const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot']; //['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets', 'electricBullets'];
     if (!this.damageTakenThisWave) {
       // 1. Primero: 10% chance de powerup RARO
-      if (Math.random() < 1) {
+      if (Math.random() < 0.1) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
@@ -2128,21 +2128,21 @@ class GameScene extends Phaser.Scene {
         return;
       }
 
-      // 3. Tercero: 10% chance de CORAZÓN
-      if (Math.random() < 0.05) {
+      // 3. Tercero: 5% chance de CORAZÓN
+      if (Math.random() < 1) {
         this.spawnPowerup(position, 'heart');
         return;
       }
     } else {
       // CON DAÑO: Solo 10% de powerup común
-      if (Math.random() < 1) {
+      if (Math.random() < 0.10) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
       }
 
       // Si no salió común: 10% chance de corazón
-      if (Math.random() < 0.10) {
+      if (Math.random() < 1) {
         this.spawnPowerup(position, 'heart');
         return;
       }
@@ -2171,9 +2171,8 @@ class GameScene extends Phaser.Scene {
     powerup.destroy();
     this.playSound(800, 0.3);
 
-    // Efectos visuales al recoger powerup
-    this.createExplosionEffect(px, py, powerupData.color, 12);
-    this.cameras.main.flash(100, 255, 255, 255);
+    // Efectos visuales al recoger powerup (solo unas partículas)
+    this.createExplosionEffect(px, py, powerupData.color, 6);
 
     let message = '';
     const color = '#' + powerupData.color.toString(16).padStart(6, '0');
