@@ -3,7 +3,7 @@
 
 // ===== DEBUG & DIFFICULTY SETTINGS =====
 const DEBUG_MODE = true;           // Set to true for testing
-const DEBUG_START_WAVE = 2;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
+const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
@@ -175,7 +175,7 @@ const ENEMY_TYPES = {
     size: 30,
     rotates: false
   },
-  pentagon: {
+  pentagon: { // Dispara ráfagas de onda cada 5 segundos
     health: 50,
     speed: 50,
     shootDelay: 5000,
@@ -185,7 +185,7 @@ const ENEMY_TYPES = {
     rotates: false,
     minWave: 3 // Aparece desde wave 3
   },
-  hexagon: {
+  hexagon: { // Dispara ráfagas rápidas durante 6 segundos
     health: 70,
     speed: 30,
     shootDelay: 300, // Dispara cada 300ms durante 6 segundos
@@ -193,27 +193,17 @@ const ENEMY_TYPES = {
     points: 80,
     size: 38,
     rotates: false,
-    minWave: 7
-  },
-  octagon: {
-    health: 90,
-    speed: 55,
-    shootDelay: 3000,
-    color: 0xaa00ff,
-    points: 120,
-    size: 40,
-    rotates: false,
     minWave: 12
   },
   spinner: {
-    health: 100,
+    health: 70,
     speed: 50,
-    shootDelay: 500, // Dispara cada 500ms
+    shootDelay: 1500, // Dispara cada 1500ms
     color: 0xff66aa,
     points: 150,
     size: 35,
     rotates: true, // Rota constantemente
-    minWave: 16
+    minWave: 7
   }
 };
 
@@ -1235,7 +1225,6 @@ class GameScene extends Phaser.Scene {
       square: 0,
       pentagon: 0,
       hexagon: 0,
-      octagon: 0,
       spinner: 0
     };
 
@@ -1248,29 +1237,22 @@ class GameScene extends Phaser.Scene {
     // Introducir pentagon desde ronda 4
     if (this.wave >= 4) {
       weights.pentagon = Math.min(25, 5 + (this.wave - 4) * 2); // 5% en ronda 4, sube hasta 25%
-      const total = weights.triangle + weights.square + weights.pentagon;
       // Redistribuir triangle y square proporcionalmente
       weights.triangle = Math.max(40, 100 - weights.square - weights.pentagon);
       weights.square = Math.max(15, weights.square - (weights.pentagon / 2));
     }
 
-    // Introducir hexagon desde ronda 7
+    // Introducir spinner desde ronda 7
     if (this.wave >= 7) {
-      weights.hexagon = Math.min(20, 5 + (this.wave - 7) * 2); // 5% en ronda 7, sube hasta 20%
-      weights.triangle = Math.max(40, weights.triangle - weights.hexagon / 2);
-      weights.square = Math.max(15, weights.square - weights.hexagon / 4);
+      weights.spinner = Math.min(15, 3 + (this.wave - 7) * 1.5); // 3% en ronda 7, sube hasta 15%
+      weights.triangle = Math.max(40, weights.triangle - weights.spinner / 2);
+      weights.square = Math.max(15, weights.square - weights.spinner / 4);
     }
 
-    // Introducir octagon desde ronda 12
+    // Introducir hexagon desde ronda 12
     if (this.wave >= 12) {
-      weights.octagon = Math.min(15, 3 + (this.wave - 12) * 1.5); // 3% en ronda 12, sube hasta 15%
-      weights.triangle = Math.max(35, weights.triangle - weights.octagon / 2);
-    }
-
-    // Introducir spinner desde ronda 16
-    if (this.wave >= 16) {
-      weights.spinner = Math.min(10, 2 + (this.wave - 16) * 1); // 2% en ronda 16, sube hasta 10%
-      weights.triangle = Math.max(30, weights.triangle - weights.spinner / 2);
+      weights.hexagon = Math.min(20, 5 + (this.wave - 12) * 2); // 5% en ronda 12, sube hasta 20%
+      weights.triangle = Math.max(30, weights.triangle - weights.hexagon / 2);
     }
 
     // Selección ponderada
@@ -1403,8 +1385,8 @@ class GameScene extends Phaser.Scene {
       }
       enemy.shootingCycle += delta;
 
-      const cycleTime = 9000; // 6s shooting + 2s pause
-      const shootingDuration = 6000;
+      const cycleTime = 6000; // 4s shooting + 2s pause
+      const shootingDuration = 4000;
       const cyclePosition = enemy.shootingCycle % cycleTime;
 
       if (cyclePosition < shootingDuration) {
@@ -1537,28 +1519,11 @@ class GameScene extends Phaser.Scene {
         });
       }
       this.playSound(500, 0.1);
-    } else if (enemy.type === 'octagon') {
-      // Dispara 8 direcciones
-      for (let i = 0; i < 8; i++) {
-        const angle = (i * Math.PI * 2 / 8);
-        const b = this.enemyBullets.create(
-          enemy.x + Math.cos(angle) * 20,
-          enemy.y + Math.sin(angle) * 20
-        );
-        b.setSize(10, 10);
-        b.setVisible(false);
-        b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-
-        this.time.delayedCall(3000, () => {
-          if (b && b.active) b.destroy();
-        });
-      }
-      this.playSound(550, 0.12);
     } else if (enemy.type === 'spinner') {
-      // Dispara 2 balas hacia el jugador
+      // Dispara 3 balas hacia el jugador
       const angle = Math.atan2(target.y - enemy.y, target.x - enemy.x);
-      for (let i = 0; i < 2; i++) {
-        const offsetAngle = angle + (i === 0 ? -0.1 : 0.1);
+      for (let i = 0; i < 3; i++) {
+        const offsetAngle = angle + (i - 1) * 0.15; // -0.15, 0, 0.15 radianes
         const b = this.enemyBullets.create(
           enemy.x + Math.cos(offsetAngle) * 20,
           enemy.y + Math.sin(offsetAngle) * 20
@@ -1604,18 +1569,6 @@ class GameScene extends Phaser.Scene {
       this.graphics.beginPath();
       for (let i = 0; i < 6; i++) {
         const angle = (i * Math.PI * 2 / 6) - Math.PI / 2;
-        const x = enemy.x + Math.cos(angle) * radius;
-        const y = enemy.y + Math.sin(angle) * radius;
-        if (i === 0) this.graphics.moveTo(x, y);
-        else this.graphics.lineTo(x, y);
-      }
-      this.graphics.closePath();
-      this.graphics.fillPath();
-    } else if (enemy.type === 'octagon') {
-      const radius = 20;
-      this.graphics.beginPath();
-      for (let i = 0; i < 8; i++) {
-        const angle = (i * Math.PI * 2 / 8) - Math.PI / 2;
         const x = enemy.x + Math.cos(angle) * radius;
         const y = enemy.y + Math.sin(angle) * radius;
         if (i === 0) this.graphics.moveTo(x, y);
