@@ -265,7 +265,7 @@ const POWERUP_TYPES = {
     rarity: 'common',
     color: 0x00aaff,
     cooldownPenalty: 0,
-    description: '+10% Speed'
+    description: '+15% Speed'
   },
   fireRate: {
     name: 'Fire Rate Up',
@@ -905,7 +905,7 @@ class GameScene extends Phaser.Scene {
           const speed = Math.sqrt(b.body.velocity.x ** 2 + b.body.velocity.y ** 2);
 
           // Blend between current direction and target direction based on homing strength
-          const turnRate = 0.05 * b.homingStrength; // More strength = faster turning
+          const turnRate = 0.025 * b.homingStrength; // More strength = faster turning (reducido de 0.05 a 0.025)
           const newAngle = currentAngle + Math.atan2(Math.sin(angle - currentAngle), Math.cos(angle - currentAngle)) * turnRate;
 
           b.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed);
@@ -933,7 +933,7 @@ class GameScene extends Phaser.Scene {
           const speed = Math.sqrt(b.body.velocity.x ** 2 + b.body.velocity.y ** 2);
 
           // Blend between current direction and target direction based on homing strength
-          const turnRate = 0.05 * b.homingStrength; // More strength = faster turning
+          const turnRate = 0.025 * b.homingStrength; // More strength = faster turning (reducido de 0.05 a 0.025)
           const newAngle = currentAngle + Math.atan2(Math.sin(angle - currentAngle), Math.cos(angle - currentAngle)) * turnRate;
 
           b.setVelocity(Math.cos(newAngle) * speed, Math.sin(newAngle) * speed);
@@ -1071,7 +1071,12 @@ class GameScene extends Phaser.Scene {
           b.color = color;
         }
 
-        this.time.delayedCall(3000, () => {
+        // Distancia base: 2000ms, cada nivel de bounce y pierce agrega 300ms
+        let bulletLifetime = 2000;
+        if (player.pierce) bulletLifetime += 300 * player.pierce; // 300ms por cada nivel de pierce
+        if (player.bounceCount > 0) bulletLifetime += 300 * player.bounceCount; // 300ms por cada nivel de bounce
+
+        this.time.delayedCall(bulletLifetime, () => {
           if (b && b.active) b.destroy();
         });
       }
@@ -1103,7 +1108,12 @@ class GameScene extends Phaser.Scene {
           b.color = color;
         }
 
-        this.time.delayedCall(3000, () => {
+        // Distancia base: 2000ms, cada nivel de bounce y pierce agrega 300ms
+        let bulletLifetime = 2000;
+        if (player.pierce) bulletLifetime += 300 * player.pierce; // 300ms por cada nivel de pierce
+        if (player.bounceCount > 0) bulletLifetime += 300 * player.bounceCount; // 300ms por cada nivel de bounce
+
+        this.time.delayedCall(bulletLifetime, () => {
           if (b && b.active) b.destroy();
         });
       }
@@ -1134,7 +1144,12 @@ class GameScene extends Phaser.Scene {
         b.homingStrength = player.homingStrength;
         b.owner = player;
 
-        this.time.delayedCall(2000, () => {
+        // Distancia base: 2000ms, cada nivel de bounce y pierce agrega 300ms
+        let bulletLifetime = 2000;
+        if (player.pierce) bulletLifetime += 300 * player.pierce; // 300ms por cada nivel de pierce
+        if (player.bounceCount > 0) bulletLifetime += 300 * player.bounceCount; // 300ms por cada nivel de bounce
+
+        this.time.delayedCall(bulletLifetime, () => {
           if (b && b.active) b.destroy();
         });
       }
@@ -2034,8 +2049,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // Waves normales: SIN DAÑO primero
-    const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'shield', 'moreDamage', 'backShot'];
-        const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets']; //['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets'];
+    const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'shield', 'moreDamage', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets'];
+        const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot']; //['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets', 'electricBullets'];
     if (!this.damageTakenThisWave) {
       // 1. Primero: 10% chance de powerup RARO
       if (Math.random() < 1) {
@@ -2103,7 +2118,7 @@ class GameScene extends Phaser.Scene {
         break;
 
       case 'speedBoost':
-        player.speed += player.baseSpeed * 0.1; // +10% velocidad
+        player.speed += player.baseSpeed * 0.15; // +15% velocidad
         message = powerupData.description;
         break;
 
