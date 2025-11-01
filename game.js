@@ -2,7 +2,7 @@
 // Fight endless waves of enemies alone or with a friend!
 
 // ===== DEBUG & SETTINGS =====
-const DEBUG_MODE = true;           // Set to true for testing
+const DEBUG_MODE = false;           // Set to true for testing
 const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
