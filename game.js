@@ -1,8 +1,8 @@
 // Battle Arena - Cooperative Wave Survival
 // Fight endless waves of enemies alone or with a friend!
 
-// ===== DEBUG & DIFFICULTY SETTINGS =====
-const DEBUG_MODE = false;           // Set to true for testing
+// ===== DEBUG & SETTINGS =====
+const DEBUG_MODE = true;           // Set to true for testing
 const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
@@ -233,16 +233,16 @@ const BOSS_TYPES = {
     color: 0xffff00,
     points: 500,
     size: 60,
-    name: 'BULLET PATTERN'
+    name: 'General Pattern'
   },
-  phase: {
+  twins: {
     health: 1200,
     speed: 40,
     shootDelay: 2000,
     color: 0xff0088,
     points: 1000,
     size: 70,
-    name: 'PHASE SHIFTER'
+    name: 'Twins Shifter´s'
   },
   laser: {
     health: 2000,
@@ -515,11 +515,11 @@ class GameScene extends Phaser.Scene {
     this.p1.baseSpeed = 200;
     this.p1.speed = this.p1State ? this.p1State.speed : 200;
     this.p1.angle = 0;
-    this.p1.specialCooldown = 0;
+    this.p1.currentSpecialCooldown = 0;
 
     // Powerup stats
     this.p1.specialBullets = this.p1State ? this.p1State.specialBullets : 1;
-    this.p1.specialCooldownPenalty = this.p1State ? this.p1State.specialCooldownPenalty : 0;
+    this.p1.specialCooldown = this.p1State ? this.p1State.specialCooldown : 2000;
     this.p1.normalShotCooldown = this.p1State ? this.p1State.normalShotCooldown : 300;
     this.p1.hasShield = this.p1State ? this.p1State.hasShield : false;
     this.p1.pierce = this.p1State ? this.p1State.pierce : 0;
@@ -544,11 +544,11 @@ class GameScene extends Phaser.Scene {
       this.p2.baseSpeed = 200;
       this.p2.speed = this.p2State ? this.p2State.speed : 200;
       this.p2.angle = 0;
-      this.p2.specialCooldown = 0;
+      this.p2.currentSpecialCooldown = 0;
 
       // Powerup stats
       this.p2.specialBullets = this.p2State ? this.p2State.specialBullets : 1;
-      this.p2.specialCooldownPenalty = this.p2State ? this.p2State.specialCooldownPenalty : 0;
+      this.p2.specialCooldown = this.p2State ? this.p2State.specialCooldown : 2000;
       this.p2.normalShotCooldown = this.p2State ? this.p2State.normalShotCooldown : 300;
       this.p2.hasShield = this.p2State ? this.p2State.hasShield : false;
       this.p2.pierce = this.p2State ? this.p2State.pierce : 0;
@@ -636,6 +636,7 @@ class GameScene extends Phaser.Scene {
       this.input.keyboard.on('keydown-TWO', () => this.debugSkipToWave(10));
       this.input.keyboard.on('keydown-THREE', () => this.debugSkipToWave(20));
       this.input.keyboard.on('keydown-NINE', () => this.debugKillAllEnemies());
+      this.input.keyboard.on('keydown-ZERO', () => this.trySpawnPowerup(true, { x: this.p1.x, y: this.p1.y }));
     }
 
     // UI
@@ -734,7 +735,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Special cooldown bar P1
-    this.drawCooldownBar(20, 45, this.p1.specialCooldown);
+    this.drawCooldownBar(20, 45, this.p1.currentSpecialCooldown);
 
     if (this.numPlayers === 2) {
       this.graphics.fillStyle(0x0099ff);
@@ -753,7 +754,7 @@ class GameScene extends Phaser.Scene {
       }
 
       // Special cooldown bar P2
-      this.drawCooldownBar(680, 45, this.p2.specialCooldown);
+      this.drawCooldownBar(680, 45, this.p2.currentSpecialCooldown);
     }
 
     // Draw bullets
@@ -930,23 +931,12 @@ class GameScene extends Phaser.Scene {
       this.hpText2.setText('P2: ' + hearts2);
     }
 
-    // Update cooldowns y notificar cuando se carga
-    if (this.p1.specialCooldown > 0) {
-      const prevCooldown = this.p1.specialCooldown;
-      this.p1.specialCooldown -= delta;
-      // Special charged
-      if (prevCooldown > 0 && this.p1.specialCooldown <= 0 && prevCooldown > delta) {
-        this.playSound(1000, 0.15);
-        this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ff00, 6);
-      }
+    // Update cooldowns
+    if (this.p1.currentSpecialCooldown > 0) {
+      this.p1.currentSpecialCooldown -= delta;
     }
-    if (this.numPlayers === 2 && this.p2.specialCooldown > 0) {
-      const prevCooldown = this.p2.specialCooldown;
-      this.p2.specialCooldown -= delta;
-      if (prevCooldown > 0 && this.p2.specialCooldown <= 0 && prevCooldown > delta) {
-        this.playSound(1000, 0.15);
-        this.createExplosionEffect(this.p2.x, this.p2.y, 0x0099ff, 6);
-      }
+    if (this.numPlayers === 2 && this.p2.currentSpecialCooldown > 0) {
+      this.p2.currentSpecialCooldown -= delta;
     }
 
     // Update and draw particles
@@ -1019,9 +1009,9 @@ class GameScene extends Phaser.Scene {
       else this.lastShot2 = time;
     }
 
-    if (Phaser.Input.Keyboard.JustDown(specialKey) && player.specialCooldown <= 0) {
+    if (Phaser.Input.Keyboard.JustDown(specialKey) && player.currentSpecialCooldown <= 0) {
       this.shootPlayer(player, true);
-      player.specialCooldown = 2000 + (player.specialCooldownPenalty || 0);
+      player.currentSpecialCooldown = player.specialCooldown;
     }
   }
 
@@ -1802,8 +1792,8 @@ class GameScene extends Phaser.Scene {
         this.scoreText.setText('Score: ' + this.score);
 
         // Track boss defeat
-        if (!this.stats.bossesDefeated.includes(BOSS_TYPES.phase.name)) {
-          this.stats.bossesDefeated.push(BOSS_TYPES.phase.name);
+        if (!this.stats.bossesDefeated.includes(BOSS_TYPES.twins.name)) {
+          this.stats.bossesDefeated.push(BOSS_TYPES.twins.name);
         }
       }
     } else {
@@ -2014,7 +2004,6 @@ class GameScene extends Phaser.Scene {
     this.playSound(300, 0.3);
   }
 
-  // Helper para wrappear texto largo
   wrapText(text, maxChars) {
     const words = text.split(' ');
     const lines = [];
@@ -2218,7 +2207,7 @@ class GameScene extends Phaser.Scene {
     // Determine boss type
     let bossType;
     if (this.wave === 5) bossType = 'pattern';
-    else if (this.wave === 10) bossType = 'phase';
+    else if (this.wave === 10) bossType = 'twins';
     else bossType = 'laser';
 
     const typeData = BOSS_TYPES[bossType];
@@ -2425,7 +2414,7 @@ class GameScene extends Phaser.Scene {
           }
         }
       }
-    } else if (boss.bossType === 'phase' && !boss.hasChildren) {
+    } else if (boss.bossType === 'twins' && !boss.hasChildren) {
       // BOSS 3: TWO TWINS alternating
 
       // Crear mellizos si no existen
@@ -2561,8 +2550,7 @@ class GameScene extends Phaser.Scene {
 
   trySpawnPowerup(isBoss, position) {
     if (isBoss) {
-      // Boss: 50% maxHeart, 50% powerup raro aleatorio
-      const bossDrops = ['maxHeart', 'spreadShot', 'homingBullets', 'bounce', 'iceBullets', 'fireBullets', 'electricBullets'];
+      const bossDrops = ['extraBullet', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets','spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot']; // 'speedBoost', 'fireRate', 'shield' and 'moreDamage' are left out
       const randomDrop = bossDrops[Math.floor(Math.random() * bossDrops.length)];
       this.spawnPowerup(position, randomDrop);
       return;
@@ -2573,39 +2561,39 @@ class GameScene extends Phaser.Scene {
         const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot']; //['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets', 'electricBullets'];
     if (!this.damageTakenThisWave) {
       // 1. Primero: 10% chance de powerup RARO
-      if (Math.random() < 0.12) {
+      if (Math.random() < 0.12 * this.getSpawnDifficulty()) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
       }
 
       // 2. Segundo: 15% chance de powerup COMÚN
-      if (Math.random() < 0.18) {
+      if (Math.random() < 0.18 * this.getSpawnDifficulty()) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
       }
 
       // 3. Tercero: 5% chance de CORAZÓN
-      if (Math.random() < 0.05) {
+      if (Math.random() < 0.05 * this.getSpawnDifficulty()) {
         this.spawnPowerup(position, 'heart');
         return;
       }
     } else {
       // WITH DAMAGE: 10% common, 5% rare
-      if (Math.random() < 0.05) {
+      if (Math.random() < 0.05 * this.getSpawnDifficulty()) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
       }
-      if (Math.random() < 0.10) {
+      if (Math.random() < 0.10 * this.getSpawnDifficulty()) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
       }
 
-      // If not common: 10% chance heart
-      if (Math.random() < 0.1) {
+      // 10% chance heart
+      if (Math.random() < 0.1 * this.getSpawnDifficulty()) {
         this.spawnPowerup(position, 'heart');
         return;
       }
@@ -2649,7 +2637,7 @@ class GameScene extends Phaser.Scene {
     switch(type) {
       case 'extraBullet':
         player.specialBullets++;
-        player.specialCooldownPenalty += 500; // +500ms solo para extraBullet
+        player.specialCooldown += 300; // +300ms solo para extraBullet
         message = `${powerupData.description} (${player.specialBullets})`;
         break;
 
@@ -2659,8 +2647,9 @@ class GameScene extends Phaser.Scene {
         break;
 
       case 'fireRate':
-        player.normalShotCooldown = Math.max(100, player.normalShotCooldown - 300);
-        message = `${powerupData.description} (${player.normalShotCooldown}ms)`;
+        player.normalShotCooldown = Math.max(50, player.normalShotCooldown * 0.8); // -20% cooldown
+        player.specialShotCooldown = Math.max(300, player.specialShotCooldown * 0.8);
+        message = `${powerupData.description}`;
         break;
 
       case 'shield':
@@ -2702,7 +2691,7 @@ class GameScene extends Phaser.Scene {
         if (player.iceDuration === 0) {
           player.iceDuration = 4000; // 4s base
         } else {
-          player.iceDuration += 1000; // +1s por cada powerup adicional
+          player.iceDuration += 2000; // +1s por cada powerup adicional
         }
         message = `${powerupData.description} (${player.iceDuration / 1000}s)`;
         break;
@@ -2711,7 +2700,7 @@ class GameScene extends Phaser.Scene {
         if (player.fireDuration === 0) {
           player.fireDuration = 3000; // 3s base
         } else {
-          player.fireDuration += 1000; // +1s por cada powerup adicional
+          player.fireDuration += 1500; // +1s por cada powerup adicional
         }
         message = `${powerupData.description} (${player.fireDuration / 1000}s)`;
         break;
@@ -2933,7 +2922,7 @@ class GameScene extends Phaser.Scene {
       maxHealth: player.maxHealth,
       speed: player.speed,
       specialBullets: player.specialBullets,
-      specialCooldownPenalty: player.specialCooldownPenalty,
+      specialCooldown: player.specialCooldown,
       normalShotCooldown: player.normalShotCooldown,
       hasShield: regeneratedShield, // Shield se regenera
       pierce: player.pierce,
