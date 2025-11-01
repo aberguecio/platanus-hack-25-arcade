@@ -7,12 +7,18 @@ const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
-const DIFFICULTY = 1;            // Difficulty multiplier
+const DIFFICULTY = 1.0;            // Difficulty multiplier
 // Examples:
 // 0.1 = Very Easy (10% enemy health, 10% enemy count, faster shooting)
 // 0.5 = Easy (50% enemy health, 50% enemy count)
 // 1.0 = Normal (default)
 // 2.0 = Hard (200% enemy health, 200% enemy count, slower shooting)
+
+const COOP_DIFFICULTY = 1.5;       // Multiplier for 2-player mode (affects enemy count & spawn rate, NOT health)
+// Applied on top of DIFFICULTY when playing with 2 players
+// 1.0 = No extra difficulty
+// 1.5 = 50% more enemies and faster spawns (default)
+// 2.0 = Double enemies and spawn rate
 //
 // DEBUG CONTROLS (when DEBUG_MODE = true):
 // Press 1: Skip to Wave 5 (Bullet Pattern Boss)
@@ -196,18 +202,7 @@ const ENEMY_TYPES = {
     color: 0x00ffff,
     points: 50,
     size: 35,
-    rotates: false,
-    minWave: 3
-  },
-  hexagon: {
-    health: 70,
-    speed: 30,
-    shootDelay: 300,
-    color: 0x00ff88,
-    points: 80,
-    size: 38,
-    rotates: false,
-    minWave: 12
+    rotates: false
   },
   spinner: {
     health: 70,
@@ -215,9 +210,17 @@ const ENEMY_TYPES = {
     shootDelay: 1500,
     color: 0xff66aa,
     points: 150,
-    size: 35,
-    rotates: true,
-    minWave: 7
+    size: 40,
+    rotates: true
+  },
+  hexagon: {
+    health: 60,
+    speed: 30,
+    shootDelay: 300,
+    color: 0x00ff88,
+    points: 80,
+    size: 38,
+    rotates: false
   }
 };
 
@@ -230,7 +233,6 @@ const BOSS_TYPES = {
     color: 0xffff00,
     points: 500,
     size: 60,
-    wave: 5,
     name: 'BULLET PATTERN'
   },
   phase: {
@@ -240,7 +242,6 @@ const BOSS_TYPES = {
     color: 0xff0088,
     points: 1000,
     size: 70,
-    wave: 10,
     name: 'PHASE SHIFTER'
   },
   laser: {
@@ -250,7 +251,6 @@ const BOSS_TYPES = {
     color: 0x00ffaa,
     points: 2000,
     size: 80,
-    wave: 20,
     name: 'ROTATING LASER'
   }
 };
@@ -259,111 +259,77 @@ const BOSS_TYPES = {
 const POWERUP_TYPES = {
   extraBullet: {
     name: 'Extra Bullet',
-    rarity: 'common',
     color: 0xffff00,
-    cooldownPenalty: 500, // Only affects this powerup
     description: '+1 Special Bullet'
   },
   speedBoost: {
     name: 'Speed Boost',
-    rarity: 'common',
     color: 0x00aaff,
-    cooldownPenalty: 0,
     description: '+15% Speed'
   },
   fireRate: {
     name: 'Fire Rate Up',
-    rarity: 'common',
     color: 0xff8800,
-    cooldownPenalty: -100, // Reduce cooldown del disparo normal
     description: 'Faster Shooting'
   },
   shield: {
     name: 'Shield',
-    rarity: 'common',
     color: 0x00ffff,
-    cooldownPenalty: 0,
     description: '1 Free Hit'
   },
   pierceShot: {
     name: 'Pierce Shot',
-    rarity: 'common',
     color: 0xff00aa,
-    cooldownPenalty: 50,
     description: 'Bullets Pierce +1'
   },
   moreDamage: {
     name: 'More Damage',
-    rarity: 'common',
     color: 0xff0000,
-    cooldownPenalty: 50,
     description: '+25% Damage'
   },
   backShot: {
     name: 'Back Shot',
-    rarity: 'common',
     color: 0xffaa00,
-    cooldownPenalty: 0,
     description: 'Shoot Backward on Special'
   },
-
-  // RARE (5% no damage first, then common)
   spreadShot: {
     name: 'Spread Shot',
-    rarity: 'rare',
     color: 0xaa00ff,
-    cooldownPenalty: 50,
     description: '+2 Normal Bullets'
   },
   homingBullets: {
     name: 'Homing Bullets',
-    rarity: 'rare',
     color: 0xff66ff,
-    cooldownPenalty: 0,
     description: 'Bullets Home In'
   },
   bounce: {
     name: 'Bounce',
-    rarity: 'rare',
     color: 0x66ff66,
-    cooldownPenalty: 0,
     description: 'Bullets Bounce +1'
   },
   iceBullets: {
     name: 'Ice Bullets',
-    rarity: 'rare',
     color: 0x00ccff,
-    cooldownPenalty: 0,
     description: 'Freeze Enemies'
   },
   fireBullets: {
     name: 'Fire Bullets',
-    rarity: 'rare',
     color: 0xff4400,
-    cooldownPenalty: 0,
     description: 'Burn Enemies'
   },
   electricBullets: {
     name: 'Electric Bullets',
-    rarity: 'rare',
     color: 0xffff00,
-    cooldownPenalty: 0,
     description: 'Stun Enemies'
   },
-
-  // ESPECIALES
   heart: {
     name: 'Heart',
-    rarity: 'special',
     color: 0xff0066,
-    cooldownPenalty: 0,
     description: '+1 Heart'
   },
   maxHeart: {
     name: 'Max Heart',
-    rarity: 'rare',
     color: 0xff00ff,
-    cooldownPenalty: 0,
     description: 'Max Hearts +1'
   }
 };
@@ -391,7 +357,12 @@ const MAP_LAYOUTS = [
     {x: 500, y: 400, w: 80, h: 80},
     {x: 300, y: 400, w: 50, h: 50},
     {x: 500, y: 200, w: 50, h: 50},
-    {x: 400, y: 300, w: 60, h: 60}
+    {x: 400, y: 300, w: 40, h: 40},
+    {x: 200, y: 100, w: 50, h: 50},
+    {x: 600, y: 500, w: 50, h: 50},
+    {x: 200, y: 500, w: 80, h: 80},
+    {x: 600, y: 100, w: 80, h: 80},
+    
   ]
 ];
 
@@ -403,6 +374,11 @@ class GameScene extends Phaser.Scene {
 
   init(data) {
     this.numPlayers = data.players || 1;
+
+    // Calculate effective difficulty (COOP_DIFFICULTY applied only to spawn/count, not health)
+    this.getSpawnDifficulty = () => {
+      return this.numPlayers === 2 ? DIFFICULTY * COOP_DIFFICULTY : DIFFICULTY;
+    };
 
     // Debug settings
     if (DEBUG_MODE && data.wave === undefined) {
@@ -422,6 +398,10 @@ class GameScene extends Phaser.Scene {
     this.transitioning = false;
     this.waitingForNextWave = false; // Prevent multiple calls
     this.lastEnemyPosition = null;
+
+    // Player alive tracking (2P mode)
+    this.p1Alive = true;
+    this.p2Alive = true;
 
     // Save player state for later restoration
     this.p1State = data.p1State || null;
@@ -686,7 +666,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5, 0);
 
     // Debug info
-    if (DEBUG_MODE || DEBUG_GODMODE || DIFFICULTY !== 1.0) {
+    if (DEBUG_MODE || DEBUG_GODMODE || DIFFICULTY !== 1.0 || (this.numPlayers === 2 && COOP_DIFFICULTY !== 1.0)) {
       let debugText = '';
       if (DEBUG_MODE) debugText += 'DEBUG MODE | ';
       if (DEBUG_GODMODE) debugText += 'GODMODE | ';
@@ -943,10 +923,10 @@ class GameScene extends Phaser.Scene {
     }
 
     // Update UI
-    const hearts1 = '♥'.repeat(Math.max(0, this.p1.health)) + '♡'.repeat(Math.max(0, this.p1.maxHealth - this.p1.health));
+    const hearts1 = this.p1Alive ? ('♥'.repeat(Math.max(0, this.p1.health)) + '♡'.repeat(Math.max(0, this.p1.maxHealth - this.p1.health))) : 'DEAD';
     this.hpText1.setText('P1: ' + hearts1);
     if (this.numPlayers === 2) {
-      const hearts2 = '♥'.repeat(Math.max(0, this.p2.health)) + '♡'.repeat(Math.max(0, this.p2.maxHealth - this.p2.health));
+      const hearts2 = this.p2Alive ? ('♥'.repeat(Math.max(0, this.p2.health)) + '♡'.repeat(Math.max(0, this.p2.maxHealth - this.p2.health))) : 'DEAD';
       this.hpText2.setText('P2: ' + hearts2);
     }
 
@@ -1011,6 +991,10 @@ class GameScene extends Phaser.Scene {
     // Ensure player exists
     if (!player || !player.body) return;
 
+    // Skip dead players
+    if (playerNum === 1 && !this.p1Alive) return;
+    if (playerNum === 2 && !this.p2Alive) return;
+
     // Always reset velocity
     player.setVelocity(0, 0);
 
@@ -1049,6 +1033,9 @@ class GameScene extends Phaser.Scene {
   // Helper: Find nearest player
   getNearestPlayer(x, y) {
     if (this.numPlayers === 1) return this.p1;
+    // Only consider alive players
+    if (!this.p1Alive) return this.p2;
+    if (!this.p2Alive) return this.p1;
     const d1 = Phaser.Math.Distance.Between(x, y, this.p1.x, this.p1.y);
     const d2 = Phaser.Math.Distance.Between(x, y, this.p2.x, this.p2.y);
     return d2 < d1 ? this.p2 : this.p1;
@@ -1130,19 +1117,13 @@ class GameScene extends Phaser.Scene {
           entity.lastBurnDamage = time;
           if (entity.health <= 0) {
             const pos = { x: entity.x, y: entity.y };
-            this.lastEnemyPosition = pos;
             if (entity.isBoss) {
-              const boss = entity.bossType === 'twin1' || entity.bossType === 'twin2' ? 'phase' : entity.bossType;
-              const bossData = BOSS_TYPES[boss];
-              if (bossData) {
-                this.score += bossData.points;
-                this.scoreText.setText('Score: ' + this.score);
-                if (!this.stats.bossesDefeated.includes(bossData.name)) {
-                  this.stats.bossesDefeated.push(bossData.name);
-                }
-                this.createExplosionEffect(pos.x, pos.y, bossData.color, 30);
-              }
+              // Note: This is from burning in applyStatusEffect, not a normal boss death
+              // We still need to call handleBossDeath but the boss is already destroyed here
+              // So we create a fake boss object with necessary data
+              this.handleBossDeath({ bossType: entity.bossType, sibling: entity.sibling }, pos);
             } else {
+              this.lastEnemyPosition = pos;
               const typeData = ENEMY_TYPES[entity.type];
               this.score += typeData.points;
               this.scoreText.setText('Score: ' + this.score);
@@ -1361,7 +1342,7 @@ class GameScene extends Phaser.Scene {
     enemy.type = typeName;
     enemy.health = Math.ceil(typeData.health * DIFFICULTY);
     enemy.speed = typeData.speed;
-    enemy.shootDelay = typeData.shootDelay / DIFFICULTY;
+    enemy.shootDelay = typeData.shootDelay / this.getSpawnDifficulty();
     enemy.spawnTime = this.time.now;
     enemy.lastShot = 0;
     enemy.angle = 0;
@@ -1408,17 +1389,11 @@ class GameScene extends Phaser.Scene {
           if (enemy.health <= 0) {
             // Save position before destroy
             const deathPosition = { x: enemy.x, y: enemy.y };
-            this.lastEnemyPosition = deathPosition;
 
             if (enemy.isBoss) {
-              const typeData = BOSS_TYPES[enemy.bossType];
-              this.score += typeData.points;
-              this.scoreText.setText('Score: ' + this.score);
-              this.bossActive = false;
-              this.openDoors();
-              this.playSound(600, 0.3);
-              this.trySpawnPowerup(true, deathPosition);
+              this.handleBossDeath(enemy, deathPosition);
             } else {
+              this.lastEnemyPosition = deathPosition;
               const typeData = ENEMY_TYPES[enemy.type];
               this.score += typeData.points;
               this.scoreText.setText('Score: ' + this.score);
@@ -1712,68 +1687,8 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.shake(400, 0.008);
         this.cameras.main.flash(400, 255, 255, 0);
 
-        // Twin check
-        if (enemy.bossType === 'twin1' || enemy.bossType === 'twin2') {
-          // Check if other twin alive
-          const otherTwin = enemy.sibling;
-          if (otherTwin && otherTwin.active && otherTwin.health > 0) {
-            // Other twin still alive
-            this.score += 250; // Points per twin
-            this.scoreText.setText('Score: ' + this.score);
-            this.playSound(600, 0.3);
-          } else {
-            // Both twins dead
-            this.score += 250; // Points for second twin
-            this.scoreText.setText('Score: ' + this.score);
-            this.bossActive = false;
-            this.openDoors();
-            this.playSound(600, 0.3);
-
-            // Track boss defeat - PHASE boss (twins)
-            if (!this.stats.bossesDefeated.includes(BOSS_TYPES.phase.name)) {
-              this.stats.bossesDefeated.push(BOSS_TYPES.phase.name);
-            }
-
-            // Spawn powerup
-            this.trySpawnPowerup(true, deathPosition);
-
-            // Message
-            const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
-              fontSize: '32px',
-              fontFamily: 'Arial',
-              color: '#0ff',
-              align: 'center'
-            }).setOrigin(0.5);
-
-            this.time.delayedCall(3000, () => msg.destroy());
-          }
-        } else {
-          // Normal boss
-          const typeData = BOSS_TYPES[enemy.bossType];
-          this.score += typeData.points;
-          this.scoreText.setText('Score: ' + this.score);
-          this.bossActive = false;
-          this.openDoors();
-          this.playSound(600, 0.3);
-
-          // Track boss defeat
-          if (!this.stats.bossesDefeated.includes(typeData.name)) {
-            this.stats.bossesDefeated.push(typeData.name);
-          }
-
-          // Spawn powerup
-          this.trySpawnPowerup(true, deathPosition);
-
-          // Message
-          const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
-            fontSize: '32px',
-            fontFamily: 'Arial',
-            color: '#0ff',
-            align: 'center'
-          }).setOrigin(0.5);
-
-          this.time.delayedCall(3000, () => msg.destroy());
-        }
+        // Centralized boss death handling
+        this.handleBossDeath(enemy, deathPosition);
       } else {
         const typeData = ENEMY_TYPES[enemy.type];
         this.score += typeData.points;
@@ -1814,7 +1729,23 @@ class GameScene extends Phaser.Scene {
       this.cameras.main.shake(200, 0.005);
 
       if (player.health <= 0) {
-        this.endGame();
+        // Mark player as dead
+        if (player === this.p1) this.p1Alive = false;
+        else if (player === this.p2) this.p2Alive = false;
+
+        // Death effects
+        this.createExplosionEffect(player.x, player.y, 0xff0000, 20);
+        this.cameras.main.shake(300, 0.008);
+
+        // Hide dead player
+        player.x = -100;
+        player.y = -100;
+        player.setVelocity(0, 0);
+
+        // Check if all players are dead
+        if (this.numPlayers === 1 || (!this.p1Alive && !this.p2Alive)) {
+          this.endGame();
+        }
       }
     }
   }
@@ -1823,7 +1754,7 @@ class GameScene extends Phaser.Scene {
     this.wave++;
     this.waveText.setText('Wave: ' + this.wave);
     this.enemiesThisWave = 0;
-    this.spawnDelay = Math.max(800, (2000 - (this.wave - 1) * 100) / DIFFICULTY);
+    this.spawnDelay = Math.max(800, (2000 - (this.wave - 1) * 100) / this.getSpawnDifficulty());
 
     // Track highest wave reached
     if (this.wave > this.stats.highestWave) {
@@ -1848,8 +1779,111 @@ class GameScene extends Phaser.Scene {
       this.spawnBoss();
       this.enemiesPerWave = 1;
     } else {
-      this.enemiesPerWave = Math.max(1, Math.ceil((5 + (this.wave - 1) * 2) * DIFFICULTY));
+      this.enemiesPerWave = Math.max(1, Math.ceil((5 + (this.wave - 1) * 2) * this.getSpawnDifficulty()));
     }
+  }
+
+  handleBossDeath(boss, deathPosition) {
+    // Centralized boss death handling
+    this.lastEnemyPosition = deathPosition;
+
+    // Handle twins special case
+    if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
+      const otherTwin = boss.sibling;
+      if (otherTwin && otherTwin.active && otherTwin.health > 0) {
+        // Other twin still alive - partial reward only
+        this.score += 250;
+        this.scoreText.setText('Score: ' + this.score);
+        this.playSound(600, 0.3);
+        return; // Don't end boss fight yet
+      } else {
+        // Both twins dead
+        this.score += 250;
+        this.scoreText.setText('Score: ' + this.score);
+
+        // Track boss defeat
+        if (!this.stats.bossesDefeated.includes(BOSS_TYPES.phase.name)) {
+          this.stats.bossesDefeated.push(BOSS_TYPES.phase.name);
+        }
+      }
+    } else {
+      // Normal boss
+      const typeData = BOSS_TYPES[boss.bossType];
+      this.score += typeData.points;
+      this.scoreText.setText('Score: ' + this.score);
+
+      // Track boss defeat
+      if (!this.stats.bossesDefeated.includes(typeData.name)) {
+        this.stats.bossesDefeated.push(typeData.name);
+      }
+    }
+
+    // Common boss death logic
+    this.bossActive = false;
+    this.openDoors();
+    this.playSound(600, 0.3);
+    if (!this.reviveDeadPlayers()) {
+      this.trySpawnPowerup(true, deathPosition); // just give a power-up if no revival
+    }
+
+    // Show message
+    const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#0ff',
+      align: 'center'
+    }).setOrigin(0.5);
+    // this.time.delayedCall(3000, () => msg.destroy());
+  }
+
+  reviveDeadPlayers() {
+    // Only revive in 2P mode
+    if (this.numPlayers !== 2) return false;
+
+    let revivedAny = false;
+
+    // Revive P1 if dead
+    if (!this.p1Alive) {
+      this.p1Alive = true;
+      this.p1.health = this.p1.maxHealth;
+      this.p1.x = 250;
+      this.p1.y = 300;
+      this.p1.setVelocity(0, 0);
+
+      // Revival effects
+      this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ff00, 15);
+      this.playSound(800, 0.25);
+
+      revivedAny = true;
+    }
+
+    // Revive P2 if dead
+    if (!this.p2Alive) {
+      this.p2Alive = true;
+      this.p2.health = this.p2.maxHealth;
+      this.p2.x = 550;
+      this.p2.y = 300;
+      this.p2.setVelocity(0, 0);
+
+      // Revival effects
+      this.createExplosionEffect(this.p2.x, this.p2.y, 0x00ff00, 15);
+      this.playSound(800, 0.25);
+
+      revivedAny = true;
+    }
+
+    // Show revival message
+    if (revivedAny) {
+      const msg = this.add.text(400, 200, 'PLAYER REVIVED!', {
+        fontSize: '36px',
+        fontFamily: 'Arial',
+        color: '#0f0',
+        stroke: '#000',
+        strokeThickness: 6
+      }).setOrigin(0.5);
+      this.time.delayedCall(2000, () => msg.destroy());
+    }
+    return revivedAny;
   }
 
   endGame() {
@@ -2193,10 +2227,10 @@ class GameScene extends Phaser.Scene {
     boss.setVisible(false);
     boss.isBoss = true;
     boss.bossType = bossType;
-    boss.health = Math.ceil(typeData.health * DIFFICULTY);
-    boss.maxHealth = Math.ceil(typeData.health * DIFFICULTY);
+    boss.health = Math.ceil(typeData.health * this.getSpawnDifficulty());
+    boss.maxHealth = Math.ceil(typeData.health * this.getSpawnDifficulty());
     boss.speed = typeData.speed;
-    boss.shootDelay = typeData.shootDelay / DIFFICULTY;
+    boss.shootDelay = typeData.shootDelay / this.getSpawnDifficulty();
     boss.lastShot = 0;
     boss.spawnTime = this.time.now; // Spawn time
     boss.angle = 0;
@@ -2270,16 +2304,9 @@ class GameScene extends Phaser.Scene {
 
           if (boss.health <= 0) {
             const deathPosition = { x: boss.x, y: boss.y };
-            this.lastEnemyPosition = deathPosition;
-            const typeData = BOSS_TYPES[boss.bossType];
-            this.score += typeData.points;
-            this.scoreText.setText('Score: ' + this.score);
-            this.bossActive = false;
-            this.openDoors();
-            this.playSound(600, 0.3);
-            this.trySpawnPowerup(true, deathPosition);
+            this.handleBossDeath(boss, deathPosition);
             boss.destroy();
-            return; // Importante: salir de updateBoss
+            return; // Exit updateBoss
           }
         }
       } else {
@@ -2410,8 +2437,8 @@ class GameScene extends Phaser.Scene {
       twin1.setVisible(false);
       twin1.isBoss = true;
       twin1.bossType = 'twin1';
-      twin1.health = Math.ceil(150 * DIFFICULTY);
-      twin1.maxHealth = Math.ceil(150 * DIFFICULTY);
+      twin1.health = Math.ceil(150 * this.getSpawnDifficulty());
+      twin1.maxHealth = Math.ceil(150 * this.getSpawnDifficulty());
       twin1.speed = 120; // Faster
       twin1.spawnTime = this.time.now;
       twin1.lastShot = 0;
@@ -2424,8 +2451,8 @@ class GameScene extends Phaser.Scene {
       twin2.setVisible(false);
       twin2.isBoss = true;
       twin2.bossType = 'twin2';
-      twin2.health = Math.ceil(150 * DIFFICULTY);
-      twin2.maxHealth = Math.ceil(150 * DIFFICULTY);
+      twin2.health = Math.ceil(150 * this.getSpawnDifficulty());
+      twin2.maxHealth = Math.ceil(150 * this.getSpawnDifficulty());
       twin2.speed = 120; // Faster
       twin2.spawnTime = this.time.now;
       twin2.lastShot = 0;
@@ -2627,12 +2654,12 @@ class GameScene extends Phaser.Scene {
         break;
 
       case 'speedBoost':
-        player.speed += player.baseSpeed * 0.15; // +15% velocidad
+        player.speed += player.baseSpeed * 0.25; // +25% velocidad
         message = powerupData.description;
         break;
 
       case 'fireRate':
-        player.normalShotCooldown = Math.max(100, player.normalShotCooldown - 100);
+        player.normalShotCooldown = Math.max(100, player.normalShotCooldown - 300);
         message = `${powerupData.description} (${player.normalShotCooldown}ms)`;
         break;
 
