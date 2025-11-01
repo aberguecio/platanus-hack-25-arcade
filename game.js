@@ -1456,45 +1456,41 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // Helper: shoot N bullets in circle pattern (reused by square, pentagon, hexagon, boss waves)
+  shootCircle(src, count, offset = 0, spd = 200, rad = 20) {
+    for (let i = 0; i < count; i++) {
+      const a = offset + i * Math.PI * 2 / count;
+      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd);
+    }
+  }
+
+  // Helper: shoot single aimed bullet (reused by triangle, laser boss)
+  shootAimed(src, tgt, spd, lifetime, isBoss = false) {
+    const a = Math.atan2(tgt.y - src.y, tgt.x - src.x);
+    if (isBoss) {
+      this.shootBossBullet(src.x, src.y, a, spd, lifetime);
+    } else {
+      this.createEnemyBullet(src.x + Math.cos(a) * 20, src.y + Math.sin(a) * 20, Math.cos(a) * spd, Math.sin(a) * spd);
+    }
+  }
+
   shootEnemy(enemy, target) {
     const s = 200;
     if (enemy.type === 'triangle') {
-      const a = Math.atan2(target.y - enemy.y, target.x - enemy.x);
-      this.createEnemyBullet(enemy.x + Math.cos(a) * 20, enemy.y + Math.sin(a) * 20, Math.cos(a) * s, Math.sin(a) * s);
+      this.shootAimed(enemy, target, s);
       this.playSound(400, 0.1);
-      this.createMuzzleFlash(enemy.x, enemy.y, a, 0xff0000, 4);
+      this.createMuzzleFlash(enemy.x, enemy.y, Math.atan2(target.y - enemy.y, target.x - enemy.x), 0xff0000, 4);
     } else if (enemy.type === 'square') {
-      for (let i = 0; i < 4; i++) {
-        const a = i * Math.PI / 2;
-        this.createEnemyBullet(enemy.x + Math.cos(a) * 20, enemy.y + Math.sin(a) * 20, Math.cos(a) * s, Math.sin(a) * s);
-        this.createMuzzleFlash(enemy.x, enemy.y, a, 0xff0000, 3);
-      }
+      this.shootCircle(enemy, 4, 0, s);
+      for (let i = 0; i < 4; i++) this.createMuzzleFlash(enemy.x, enemy.y, i * Math.PI / 2, 0xff0000, 3);
       this.playSound(400, 0.1);
     } else if (enemy.type === 'pentagon') {
-      for (let i = 0; i < 5; i++) {
-        const a = i * Math.PI * 2 / 5;
-        this.createEnemyBullet(enemy.x + Math.cos(a) * 20, enemy.y + Math.sin(a) * 20, Math.cos(a) * s, Math.sin(a) * s);
-      }
+      this.shootCircle(enemy, 5, 0, s);
       this.playSound(450, 0.12);
-      this.time.delayedCall(250, () => {
-        for (let i = 0; i < 5; i++) {
-          const a = (i * Math.PI * 2 / 5) + (Math.PI / 5);
-          this.createEnemyBullet(enemy.x + Math.cos(a) * 20, enemy.y + Math.sin(a) * 20, Math.cos(a) * s, Math.sin(a) * s);
-        }
-        this.playSound(450, 0.12);
-      });
-      this.time.delayedCall(500, () => {
-        for (let i = 0; i < 5; i++) {
-          const a = i * Math.PI * 2 / 5;
-          this.createEnemyBullet(enemy.x + Math.cos(a) * 20, enemy.y + Math.sin(a) * 20, Math.cos(a) * s, Math.sin(a) * s);
-        }
-        this.playSound(450, 0.12);
-      });
+      this.time.delayedCall(250, () => { if (enemy.active) { this.shootCircle(enemy, 5, Math.PI / 5, s); this.playSound(450, 0.12); } });
+      this.time.delayedCall(500, () => { if (enemy.active) { this.shootCircle(enemy, 5, 0, s); this.playSound(450, 0.12); } });
     } else if (enemy.type === 'hexagon') {
-      for (let i = 0; i < 6; i++) {
-        const a = i * Math.PI * 2 / 6;
-        this.createEnemyBullet(enemy.x + Math.cos(a) * 20, enemy.y + Math.sin(a) * 20, Math.cos(a) * s, Math.sin(a) * s);
-      }
+      this.shootCircle(enemy, 6, 0, s);
       this.playSound(500, 0.1);
     } else if (enemy.type === 'spinner') {
       const a = Math.atan2(target.y - enemy.y, target.x - enemy.x);
@@ -2402,9 +2398,7 @@ class GameScene extends Phaser.Scene {
           if (burstElapsed < boss.burstDuration) {
             // Shoot in burst
             if (time - boss.lastBurstShot > boss.burstShotInterval) {
-              // Disparar bala hacia el jugador
-              const angleToTarget = Math.atan2(target.y - boss.y, target.x - boss.x);
-              this.shootWave(boss, 1, angleToTarget, 250, 2000, 0); // 1 fast bullet
+              this.shootAimed(boss, target, 250, 2000, true);
               boss.lastBurstShot = time;
             }
           } else {
@@ -2512,10 +2506,9 @@ class GameScene extends Phaser.Scene {
       if (twin.isAttacking) {
         // Atacando durante 5 segundos
         if (twin.bossType === 'twin1') {
-          // Twin 1: waves
+          // Twin 1: circular waves
           if (time - twin.lastShot > 300 * shootDelayMultiplier) {
-            const angleToTarget = Math.atan2(target.y - twin.y, target.x - twin.x);
-            this.shootWave(twin, 10, angleToTarget, 200, 3000, 0);
+            this.shootWave(twin, 10, 0, 200, 3000, 0);
             twin.lastShot = time;
           }
         } else {
@@ -2826,7 +2819,7 @@ class GameScene extends Phaser.Scene {
 
   // Pattern: Circular wave
   // bulletCount: bullets in circle
-  // angleOffset: initial angle (rad)
+  // angleOffset: initial angle offset (rad)
   // spawnRadius: spawn radius
   shootWave(source, bulletCount, angleOffset, speed, lifetime, spawnRadius = 0) {
     for (let i = 0; i < bulletCount; i++) {
