@@ -109,6 +109,7 @@ class MenuScene extends Phaser.Scene {
   create() {
     this.graphics = this.add.graphics();
     this.selectedOption = 0; // 0 = 1 player, 1 = 2 players
+    this.startBackgroundMusic();
 
     // Title
     this.add.text(400, 120, 'OBSCURANTISM', {
@@ -241,6 +242,73 @@ class MenuScene extends Phaser.Scene {
       this.text2.setScale(1.2);
       this.text2.setColor('#ffff00');
     }
+  }
+
+  startBackgroundMusic() {
+    if (this.musicPlaying) return;
+    this.musicPlaying = true;
+
+    const ctx = this.sound.context;
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.03;
+    masterGain.connect(ctx.destination);
+
+    const progression = [
+      [220, 262, 330], [175, 220, 262], [262, 330, 392], [196, 247, 294]
+    ];
+
+    const beatDuration = 0.5;
+    const loopLength = progression.length * 2 * beatDuration;
+
+    const playChord = (chordNotes, startTime, duration) => {
+      chordNotes.forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.frequency.value = freq;
+        osc.type = 'triangle';
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      });
+    };
+
+    const melodyPattern = [0, 2, 1, 2];
+    const playMelody = (chordNotes, startTime, totalDuration) => {
+      melodyPattern.forEach((noteIndex, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(masterGain);
+        osc.frequency.value = chordNotes[noteIndex] * 2;
+        osc.type = 'square';
+        const noteStart = startTime + (i * totalDuration / melodyPattern.length);
+        const noteDuration = totalDuration / melodyPattern.length;
+        gain.gain.setValueAtTime(0, noteStart);
+        gain.gain.linearRampToValueAtTime(0.15, noteStart + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.01, noteStart + noteDuration);
+        osc.start(noteStart);
+        osc.stop(noteStart + noteDuration);
+      });
+    };
+
+    let nextLoopTime = ctx.currentTime;
+    const scheduleMusic = () => {
+      if (!this.musicPlaying) return;
+      const currentTime = nextLoopTime;
+      progression.forEach((chord, i) => {
+        const chordStart = currentTime + (i * 2 * beatDuration);
+        playChord(chord, chordStart, beatDuration * 2);
+        playMelody(chord, chordStart, beatDuration * 2);
+      });
+      nextLoopTime += loopLength;
+      const delay = (nextLoopTime - ctx.currentTime) * 1000;
+      if (delay > 100) setTimeout(scheduleMusic, delay - 100);
+    };
+    scheduleMusic();
   }
 
   startGame() {
@@ -494,9 +562,6 @@ class GameScene extends Phaser.Scene {
   create() {
     // Graphics object
     this.graphics = this.add.graphics();
-
-    // Start background music
-    this.startBackgroundMusic();
 
     // Arena walls
     this.walls = this.physics.add.staticGroup();
@@ -2108,101 +2173,6 @@ class GameScene extends Phaser.Scene {
 
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + dur);
-  }
-
-  startBackgroundMusic() {
-    if (this.musicPlaying) return;
-    this.musicPlaying = true;
-
-    const ctx = this.sound.context;
-    const masterGain = ctx.createGain();
-    masterGain.gain.value = 0.03; // Volumen bajo para no ser molesto
-    masterGain.connect(ctx.destination);
-
-    // Chord progression: Am - F - C - G
-    const progression = [
-      [220, 262, 330], // Am (A C E)
-      [175, 220, 262], // F (F A C)
-      [262, 330, 392], // C (C E G)
-      [196, 247, 294]  // G (G B D)
-    ];
-
-    const beatDuration = 0.5; // 120 BPM
-    const loopLength = progression.length * 2 * beatDuration; // 4 acordes, 2 beats cada uno
-
-    const playChord = (chordNotes, startTime, duration) => {
-      chordNotes.forEach((freq) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        osc.connect(gain);
-        gain.connect(masterGain);
-
-        osc.frequency.value = freq;
-        osc.type = 'triangle'; // Softer sound
-
-        // Melodic envelope
-        gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-
-        osc.start(startTime);
-        osc.stop(startTime + duration);
-      });
-    };
-
-    // Main melody (arpeggios)
-    const melodyPattern = [0, 2, 1, 2]; // Índices dentro del acorde
-    const playMelody = (chordNotes, startTime, totalDuration) => {
-      melodyPattern.forEach((noteIndex, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        osc.connect(gain);
-        gain.connect(masterGain);
-
-        osc.frequency.value = chordNotes[noteIndex] * 2; // Una octava arriba
-        osc.type = 'square';
-
-        const noteStart = startTime + (i * totalDuration / melodyPattern.length);
-        const noteDuration = totalDuration / melodyPattern.length;
-
-        gain.gain.setValueAtTime(0, noteStart);
-        gain.gain.linearRampToValueAtTime(0.15, noteStart + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.01, noteStart + noteDuration);
-
-        osc.start(noteStart);
-        osc.stop(noteStart + noteDuration);
-      });
-    };
-
-    let nextLoopTime = ctx.currentTime;
-
-    const scheduleMusic = () => {
-      if (!this.musicPlaying) return;
-
-      const currentTime = nextLoopTime;
-
-      progression.forEach((chord, i) => {
-        const chordStart = currentTime + (i * 2 * beatDuration);
-
-        // Tocar acorde (2 beats)
-        playChord(chord, chordStart, beatDuration * 2);
-
-        // Melody (fast arpeggio)
-        playMelody(chord, chordStart, beatDuration * 2);
-      });
-
-      // Schedule next loop
-      nextLoopTime += loopLength;
-      const delay = (nextLoopTime - ctx.currentTime) * 1000;
-
-      if (delay > 100) {
-        setTimeout(scheduleMusic, delay - 100); // Schedule 100ms early
-      }
-    };
-
-    scheduleMusic();
   }
 
   stopBackgroundMusic() {
