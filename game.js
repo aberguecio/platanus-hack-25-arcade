@@ -154,7 +154,7 @@ class MenuScene extends Phaser.Scene {
       color: '#aaa'
     }).setOrigin(0.5);
 
-    this.add.text(200, controlsY + 90, 'Shoot: Q', {
+    this.add.text(200, controlsY + 90, 'Shoot: Q or R', {
       fontSize: '14px',
       fontFamily: 'Arial',
       color: '#aaa'
@@ -179,13 +179,13 @@ class MenuScene extends Phaser.Scene {
       color: '#aaa'
     }).setOrigin(0.5);
 
-    this.add.text(600, controlsY + 90, 'Shoot: . (period)', {
+    this.add.text(600, controlsY + 90, 'Shoot: U or P', {
       fontSize: '14px',
       fontFamily: 'Arial',
       color: '#aaa'
     }).setOrigin(0.5);
 
-    this.add.text(600, controlsY + 110, 'Special: / (slash)', {
+    this.add.text(600, controlsY + 110, 'Special: O', {
       fontSize: '14px',
       fontFamily: 'Arial',
       color: '#aaa'
@@ -1523,7 +1523,7 @@ class GameScene extends Phaser.Scene {
       if (elapsed < enemy.burnDuration) {
         // Apply damage every 500ms
         if (time - enemy.burnTickTime > 500) {
-          enemy.health -= 2; // 2 damage per tick
+          enemy.health -= 3; // 3 damage per tick
           enemy.burnTickTime = time;
           this.playSound(200, 0.03);
 
@@ -2288,7 +2288,7 @@ class GameScene extends Phaser.Scene {
     else {
       // Generate random boss (wave 30+)
       bossType = 'random';
-      const points = 3 + Math.floor((this.wave - 20) / 10); // 3-10 points
+      const points = 7 + Math.floor((this.wave - 30) / 10); // 7+ points (starts at wave 30)
       const waveScale = (this.wave - 20) / 10;
       typeData = {
         health: 500 + waveScale * 500,
@@ -2323,7 +2323,7 @@ class GameScene extends Phaser.Scene {
 
     // Random boss properties
     if (bossType === 'random') {
-      boss.starPoints = 3 + Math.floor((this.wave - 20) / 10);
+      boss.starPoints = 7 + Math.floor((this.wave - 30) / 10);
       boss.points = typeData.points; // Store points for scoring
       boss.attackPatterns = [];
       const patternCount = 2 + Math.floor(Math.random() * 2); // 2-3 patterns
@@ -2398,7 +2398,7 @@ class GameScene extends Phaser.Scene {
       if (elapsed < boss.burnDuration) {
         // Apply damage every 500ms
         if (time - boss.burnTickTime > 500) {
-          boss.health -= 2; // 2 damage per tick
+          boss.health -= 3; // 3 damage per tick
           boss.burnTickTime = time;
           this.playSound(200, 0.03);
 
@@ -2835,7 +2835,7 @@ class GameScene extends Phaser.Scene {
         break;
 
       case 'homingBullets':
-        player.homingStrength = Math.min(1.0, player.homingStrength + 0.2); // Incrementa homing
+        player.homingStrength = Math.min(1.0, player.homingStrength + 0.15); // Incrementa homing
         message = `${powerupData.description} (${Math.floor(player.homingStrength * 100)}%)`;
         break;
 
@@ -3032,12 +3032,12 @@ class GameScene extends Phaser.Scene {
     } else {
       this.graphics.fillStyle(BOSS_TYPES[boss.bossType].color);
       if (boss.bossType === 'pattern') {
-        this.drawPolygon(boss.x, boss.y, 6, 35, 15, -Math.PI / 2);
+        this.drawPolygon(boss.x, boss.y, 4, 35, 15, -Math.PI / 2);
       } else if (boss.bossType === 'laser') {
         this.graphics.save();
         this.graphics.translateCanvas(boss.x, boss.y);
         this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-        this.drawPolygon(0, 0, 10, 45, 20, 0);
+        this.drawPolygon(0, 0, 6, 45, 20, 0);
         this.graphics.restore();
       }
     }
