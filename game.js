@@ -431,6 +431,18 @@ const MAP_LAYOUTS = [
     {x: 200, y: 500, w: 80, h: 80},
     {x: 600, y: 100, w: 80, h: 80},
     
+  ],
+    [
+    {x: 200, y: 150, w: 50, h: 50},
+    {x: 200, y: 300, w: 50, h: 50},
+    {x: 200, y: 450, w: 50, h: 50},
+    {x: 400, y: 150, w: 50, h: 50},
+    {x: 400, y: 300, w: 50, h: 50},
+    {x: 400, y: 450, w: 50, h: 50},
+    {x: 600, y: 150, w: 50, h: 50},
+    {x: 600, y: 300, w: 50, h: 50},
+    {x: 600, y: 450, w: 50, h: 50},
+    
   ]
 ];
 
@@ -1826,7 +1838,7 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(2000, () => waveMsg.destroy());
 
     // Check if this is a boss wave
-    if (this.wave === 5 || this.wave === 10 || this.wave === 20) {
+    if (this.wave === 5 || this.wave % 10 === 0) {
       this.spawnBoss();
       this.enemiesPerWave = 1;
     } else {
@@ -1858,14 +1870,24 @@ class GameScene extends Phaser.Scene {
         }
       }
     } else {
-      // Normal boss
-      const typeData = BOSS_TYPES[boss.bossType];
-      this.score += typeData.points;
+      // Normal or random boss
+      let points, bossName;
+      if (boss.bossType === 'random') {
+        // Random boss uses stored points
+        points = boss.points || (500 + ((this.wave - 20) / 10) * 500);
+        bossName = boss.starPoints + '-STAR BOSS';
+      } else {
+        const typeData = BOSS_TYPES[boss.bossType];
+        points = typeData.points;
+        bossName = typeData.name;
+      }
+
+      this.score += points;
       this.scoreText.setText('Score: ' + this.score);
 
       // Track boss defeat
-      if (!this.stats.bossesDefeated.includes(typeData.name)) {
-        this.stats.bossesDefeated.push(typeData.name);
+      if (!this.stats.bossesDefeated.includes(bossName)) {
+        this.stats.bossesDefeated.push(bossName);
       }
     }
 
@@ -2153,9 +2175,23 @@ class GameScene extends Phaser.Scene {
     this.obstacles.clear(true, true);
     this.obstacleData = [];
 
-    // Get map layout based on level
-    const mapIndex = Math.min(this.level - 1, MAP_LAYOUTS.length - 1);
-    const layout = MAP_LAYOUTS[mapIndex];
+    // Get map layout: 4 predefined, then random every 10 waves
+    let layout;
+    if (this.level <= MAP_LAYOUTS.length) {
+      layout = MAP_LAYOUTS[this.level - 1];
+    } else {
+      // Generate random map (4-8 blocks)
+      const blockCount = 4 + Math.floor(Math.random() * 5);
+      layout = [];
+      for (let i = 0; i < blockCount; i++) {
+        layout.push({
+          x: 150 + Math.random() * 500,
+          y: 150 + Math.random() * 300,
+          w: 40 + Math.random() * 100,
+          h: 40 + Math.random() * 100
+        });
+      }
+    }
 
     // Create obstacles from layout
     layout.forEach(obs => {
@@ -2171,12 +2207,31 @@ class GameScene extends Phaser.Scene {
     this.enemiesThisWave = 1;
 
     // Determine boss type
-    let bossType;
+    let bossType, typeData, bossName;
     if (this.wave === 5) bossType = 'pattern';
     else if (this.wave === 10) bossType = 'twins';
-    else bossType = 'laser';
+    else if (this.wave === 20) bossType = 'laser';
+    else {
+      // Generate random boss (wave 30+)
+      bossType = 'random';
+      const points = 3 + Math.floor((this.wave - 20) / 10); // 3-10 points
+      const waveScale = (this.wave - 20) / 10;
+      typeData = {
+        health: 500 + waveScale * 500,
+        speed: 30,
+        shootDelay: Math.max(500, 1500 - waveScale * 100),
+        color: Math.random() * 0xffffff,
+        points: 500 + waveScale * 500,
+        size: 60 + points * 3
+      };
+      bossName = points + '-STAR BOSS';
+    }
 
-    const typeData = BOSS_TYPES[bossType];
+    if (bossType !== 'random') {
+      typeData = BOSS_TYPES[bossType];
+      bossName = typeData.name;
+    }
+
     const boss = this.enemies.create(400, 300, null);
     boss.setSize(typeData.size, typeData.size);
     boss.setVisible(false);
@@ -2187,13 +2242,29 @@ class GameScene extends Phaser.Scene {
     boss.speed = typeData.speed;
     boss.shootDelay = typeData.shootDelay / this.getSpawnDifficulty();
     boss.lastShot = 0;
-    boss.spawnTime = this.time.now; // Spawn time
+    boss.spawnTime = this.time.now;
     boss.angle = 0;
     boss.patternIndex = 0;
     boss.hasChildren = false;
 
+    // Random boss properties
+    if (bossType === 'random') {
+      boss.starPoints = 3 + Math.floor((this.wave - 20) / 10);
+      boss.points = typeData.points; // Store points for scoring
+      boss.attackPatterns = [];
+      const patternCount = 2 + Math.floor(Math.random() * 2); // 2-3 patterns
+      for (let i = 0; i < patternCount; i++) {
+        const r = Math.random();
+        if (r < 0.33) boss.attackPatterns.push('wave');
+        else if (r < 0.66) boss.attackPatterns.push('spiral');
+        else boss.attackPatterns.push('laser');
+      }
+      boss.currentPattern = 0;
+      boss.patternTimer = 0;
+    }
+
     // Pattern boss vars
-    boss.attackPhase = 0; // 0: spiral, 1: pause, 2: waves, 3: pause
+    boss.attackPhase = 0;
     boss.phaseStartTime = 0;
     boss.spiralFired = false;
     boss.wave1Fired = false;
@@ -2207,7 +2278,7 @@ class GameScene extends Phaser.Scene {
     this.createExplosionEffect(400, 300, 0xff0000, 20);
 
     // Show boss intro message
-    const msg = this.add.text(400, 250, 'WARNING!\n' + typeData.name, {
+    const msg = this.add.text(400, 250, 'WARNING!\n' + bossName, {
       fontSize: '48px',
       fontFamily: 'Arial',
       color: '#f00',
@@ -2420,6 +2491,55 @@ class GameScene extends Phaser.Scene {
 
       // Destruir el boss original (ya no se usa)
       boss.destroy();
+    } else if (boss.bossType === 'random') {
+      // RANDOM BOSS: Star with multiple patterns
+      const target = this.getNearestPlayer(boss.x, boss.y);
+      const dx = target.x - boss.x;
+      const dy = target.y - boss.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      // Circular movement
+      const moveSpeed = boss.speed * speedMultiplier;
+      if (dist > 200) {
+        boss.setVelocity(dx/dist * moveSpeed, dy/dist * moveSpeed);
+      } else if (dist < 150) {
+        boss.setVelocity(-dx/dist * moveSpeed, -dy/dist * moveSpeed);
+      } else {
+        const angle = time * 0.001;
+        boss.setVelocity(Math.cos(angle) * moveSpeed, Math.sin(angle) * moveSpeed);
+      }
+
+      boss.angle += delta * 0.05; // Rotate
+
+      // Attack patterns
+      if (time - boss.spawnTime > 1000) {
+        if (boss.patternTimer === 0) boss.patternTimer = time;
+        const elapsed = time - boss.patternTimer;
+
+        if (elapsed > 3000) { // Switch pattern every 3s
+          boss.currentPattern = (boss.currentPattern + 1) % boss.attackPatterns.length;
+          boss.patternTimer = time;
+          boss.spiralFired = false;
+        }
+
+        const pattern = boss.attackPatterns[boss.currentPattern];
+        if (pattern === 'wave') {
+          if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
+            this.shootWave(boss, boss.starPoints * 2, 0, 200, 3000, 0);
+            boss.lastShot = time;
+          }
+        } else if (pattern === 'spiral') {
+          if (!boss.spiralFired) {
+            this.shootSpiral(boss, 30, boss.starPoints, Math.PI * 2, 0, 250, 3000, 80);
+            boss.spiralFired = true;
+          }
+        } else if (pattern === 'laser') {
+          if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
+            this.shootAimed(boss, target, 300, 2000, true);
+            boss.lastShot = time;
+          }
+        }
+      }
     }
   }
 
@@ -2827,6 +2947,14 @@ class GameScene extends Phaser.Scene {
     if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
       this.graphics.fillStyle(boss.bossType === 'twin1' ? 0xff00ff : 0x00ffff);
       this.drawPolygon(boss.x, boss.y, 5, 30, 12, -Math.PI / 2);
+    } else if (boss.bossType === 'random') {
+      // Draw random star boss
+      this.graphics.fillStyle(Math.floor(boss.health / boss.maxHealth * 0xffffff));
+      this.graphics.save();
+      this.graphics.translateCanvas(boss.x, boss.y);
+      this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
+      this.drawPolygon(0, 0, boss.starPoints, boss.maxHealth / 20, boss.maxHealth / 40, 0);
+      this.graphics.restore();
     } else {
       this.graphics.fillStyle(BOSS_TYPES[boss.bossType].color);
       if (boss.bossType === 'pattern') {
