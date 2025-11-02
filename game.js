@@ -2660,44 +2660,38 @@ class GameScene extends Phaser.Scene {
 
     // Waves normales: SIN DAÑO primero
     const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'shield', 'moreDamage', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets'];
-        const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot']; //['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot', 'iceBullets', 'fireBullets', 'electricBullets'];
-    const chance = Math.random();
-    //console.log('Powerup spawn chance:', chance.toFixed(3));
+    const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot'];
+    const chance = Math.random() / this.getSpawnDifficulty(); // Adjust chance by difficulty
+
     if (!this.damageTakenThisWave) {
-      // 1. Primero: 15% chance de powerup RARO
-      if (chance < 0.15 * this.getSpawnDifficulty()) {
+      // NO DAMAGE: 15% rare, 20% common, 15% heart
+      if (chance < 0.15) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
       }
-
-      // 2. Segundo: 20% chance de powerup COMÚN
-      if (chance < 0.35 * this.getSpawnDifficulty()) {
+      if (chance < 0.35) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
       }
-
-      // 3. Tercero: 15% chance de CORAZÓN
-      if (chance < 0.50 * this.getSpawnDifficulty()) {
+      if (chance < 0.50) {
         this.spawnPowerup(position, 'heart');
         return;
       }
     } else {
-      // WITH DAMAGE: 15% common, 5% rare
-      if (chance < 0.05 * this.getSpawnDifficulty()) {
+      // WITH DAMAGE: 5% rare, 15% common, 15% heart
+      if (chance < 0.05) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
       }
-      if (chance < 0.20 * this.getSpawnDifficulty()) {
+      if (chance < 0.20) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
       }
-
-      // 10% chance heart
-      if (chance < 0.35 * this.getSpawnDifficulty()) {
+      if (chance < 0.35) {
         this.spawnPowerup(position, 'heart');
         return;
       }
