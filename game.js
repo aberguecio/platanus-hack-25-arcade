@@ -136,7 +136,7 @@ class MenuScene extends Phaser.Scene {
       color: '#00ff00'
     }).setOrigin(0.5);
 
-    this.text2 = this.add.text(400, 310, '2 PLAYERS CO-OP', {
+    this.text2 = this.add.text(400, 310, '2 PLAYERS', {
       fontSize: '36px',
       fontFamily: 'Arial',
       color: '#0099ff'
@@ -177,20 +177,22 @@ class MenuScene extends Phaser.Scene {
   }
 
   update(time) {
-    // Draw animated background
+    // Draw animated background with diagonal movement
     this.graphics.clear();
     this.graphics.fillStyle(0x000000, 1);
     this.graphics.fillRect(0, 0, 800, 600);
 
-    // Grid pattern
+    // Grid pattern with diagonal movement
     this.graphics.lineStyle(1, 0x1a1a1a, 1);
-    for (let i = 0; i < 800; i += 40) {
+    const offsetX = (time * 0.02) % 40; // Horizontal movement
+    const offsetY = (time * 0.02) % 40; // Vertical movement
+    for (let i = -40; i < 840; i += 40) {
       const wave = Math.sin(time * 0.001 + i * 0.02) * 5;
-      this.graphics.lineBetween(i, 0, i, 600 + wave);
+      this.graphics.lineBetween(i + offsetX, 0, i + offsetX, 600 + wave);
     }
-    for (let j = 0; j < 600; j += 40) {
+    for (let j = -40; j < 640; j += 40) {
       const wave = Math.cos(time * 0.001 + j * 0.02) * 5;
-      this.graphics.lineBetween(0, j, 800 + wave, j);
+      this.graphics.lineBetween(0, j + offsetY, 800 + wave, j + offsetY);
     }
 
     // Selection
@@ -398,7 +400,7 @@ const POWERUP_TYPES = {
   shield: {
     name: 'Shield',
     color: 0x00ffff,
-    description: '1 Free Hit'
+    description: 'Shield'
   },
   pierceShot: {
     name: 'Pierce Shot',
@@ -615,6 +617,9 @@ class GameScene extends Phaser.Scene {
     this.doorWallRight.body.setSize(20, 40);
     this.doorWallRight.setVisible(false);
 
+    // Array for easy door management
+    this.doorWallArray = [this.doorWallTop, this.doorWallBottom, this.doorWallLeft, this.doorWallRight];
+
     // Door zones (overlap detection when open)
     this.doorZones = this.physics.add.staticGroup();
     this.doorTop = this.doorZones.create(400, 10, null);
@@ -668,40 +673,29 @@ class GameScene extends Phaser.Scene {
       this.physics.add.collider(p, this.obstacles);
     });
 
-    this.physics.add.collider(this.playerBullets, this.walls, (b, wall) => this.handleBulletWallCollision(b, wall));
-    this.physics.add.collider(this.playerBullets, this.doorWalls, (b, wall) => this.handleBulletWallCollision(b, wall));
-    this.physics.add.collider(this.playerBullets, this.obstacles, (b, wall) => this.handleBulletWallCollision(b, wall));
-    this.physics.add.collider(this.playerSpecialBullets, this.walls, (b, wall) => this.handleBulletWallCollision(b, wall));
-    this.physics.add.collider(this.playerSpecialBullets, this.doorWalls, (b, wall) => this.handleBulletWallCollision(b, wall));
-    this.physics.add.collider(this.playerSpecialBullets, this.obstacles, (b, wall) => this.handleBulletWallCollision(b, wall));
-    this.physics.add.collider(this.enemyBullets, this.walls, (b) => b.destroy());
-    this.physics.add.collider(this.enemyBullets, this.doorWalls, (b) => b.destroy());
-    this.physics.add.collider(this.enemyBullets, this.obstacles, (b) => b.destroy());
-    this.physics.add.collider(this.enemies, this.walls);
-    this.physics.add.collider(this.enemies, this.doorWalls);
-    this.physics.add.collider(this.enemies, this.obstacles);
+    // Bullet and enemy collisions with walls/obstacles
+    const wallGroups = [this.walls, this.doorWalls, this.obstacles];
+    const playerBulletGroups = [this.playerBullets, this.playerSpecialBullets];
+    playerBulletGroups.forEach(bullets => {
+      wallGroups.forEach(walls => {
+        this.physics.add.collider(bullets, walls, (b, wall) => this.handleBulletWallCollision(b, wall));
+      });
+    });
+    wallGroups.forEach(walls => {
+      this.physics.add.collider(this.enemyBullets, walls, (b) => b.destroy());
+      this.physics.add.collider(this.enemies, walls);
+    });
 
     // Player bullets hit enemies
     this.physics.add.overlap(this.playerBullets, this.enemies, (b, e) => this.hitEnemy(e, b));
     this.physics.add.overlap(this.playerSpecialBullets, this.enemies, (b, e) => this.hitEnemy(e, b));
 
-    // Enemy bullets hit players
-    this.physics.add.overlap(this.enemyBullets, this.p1, (p, b) => this.hitPlayer(p, b));
-    if (this.numPlayers === 2) {
-      this.physics.add.overlap(this.enemyBullets, this.p2, (p, b) => this.hitPlayer(p, b));
-    }
-
-    // Door collision detection (overlap, no blocking)
-    this.physics.add.overlap(this.p1, this.doorZones, (p, d) => this.handleDoorOverlap(p, d));
-    if (this.numPlayers === 2) {
-      this.physics.add.overlap(this.p2, this.doorZones, (p, d) => this.handleDoorOverlap(p, d));
-    }
-
-    // Powerup collision detection
-    this.physics.add.overlap(this.p1, this.powerups, (p, pow) => this.collectPowerup(p, pow));
-    if (this.numPlayers === 2) {
-      this.physics.add.overlap(this.p2, this.powerups, (p, pow) => this.collectPowerup(p, pow));
-    }
+    // Player overlaps (bullets, doors, powerups)
+    this.players.forEach(p => {
+      this.physics.add.overlap(this.enemyBullets, p, (player, b) => this.hitPlayer(player, b));
+      this.physics.add.overlap(p, this.doorZones, (player, d) => this.handleDoorOverlap(player, d));
+      this.physics.add.overlap(p, this.powerups, (player, pow) => this.collectPowerup(player, pow));
+    });
 
     // Controls
     this.keys = this.input.keyboard.addKeys({
@@ -735,16 +729,28 @@ class GameScene extends Phaser.Scene {
 
     // UI
     this.hpText1 = this.add.text(20, 20, 'P1: 100 HP', {
-      fontSize: '18px',
+      fontSize: '20px',
       fontFamily: 'Arial',
       color: '#0f0'
     });
 
+    this.shieldText1 = this.add.text(20, 20, '', {
+      fontSize: '15px',
+      fontFamily: 'Arial',
+      color: '#0ff'
+    });
+
     if (this.numPlayers === 2) {
       this.hpText2 = this.add.text(780, 20, 'P2: 100 HP', {
-        fontSize: '18px',
+        fontSize: '20px',
         fontFamily: 'Arial',
         color: '#09f'
+      }).setOrigin(1, 0);
+
+      this.shieldText2 = this.add.text(780, 20, '', {
+        fontSize: '15px',
+        fontFamily: 'Arial',
+        color: '#0ff'
       }).setOrigin(1, 0);
     }
 
@@ -1028,33 +1034,31 @@ class GameScene extends Phaser.Scene {
       });
     }
 
-    // Update UI
+    // Update UI with hearts and shields
     const hearts1 = this.p1Alive ? ('♥'.repeat(Math.max(0, this.p1.health)) + '♡'.repeat(Math.max(0, this.p1.maxHealth - this.p1.health))) : 'DEAD';
+    const shields1 = this.p1Alive && this.p1.maxShields > 0 ? (' ⛊'.repeat(Math.max(0, this.p1.shields)) + '⛉'.repeat(Math.max(0, this.p1.maxShields - this.p1.shields))) : '';
     this.hpText1.setText('P1: ' + hearts1);
+    this.shieldText1.setText(shields1);
+    this.shieldText1.setPosition(20 + this.hpText1.width, 23);
     if (this.numPlayers === 2) {
       const hearts2 = this.p2Alive ? ('♥'.repeat(Math.max(0, this.p2.health)) + '♡'.repeat(Math.max(0, this.p2.maxHealth - this.p2.health))) : 'DEAD';
+      const shields2 = this.p2Alive && this.p2.maxShields > 0 ? ('⛊'.repeat(Math.max(0, this.p2.shields)) + '⛉'.repeat(Math.max(0, this.p2.maxShields - this.p2.shields)) + ' ') : '';
       this.hpText2.setText('P2: ' + hearts2);
+      this.shieldText2.setText(shields2);
+      this.shieldText2.setPosition(780 - this.shieldText2.width, 23);
     }
 
-    // Update cooldowns
-    if (this.p1.currentSpecialCooldown > 0) {
-      const wasCooling = this.p1.currentSpecialCooldown > 0;
-      this.p1.currentSpecialCooldown -= delta;
-      if (wasCooling && this.p1.currentSpecialCooldown <= 0) {
-        this.p1.specialReadyEffect = 300; // 300ms effect
+    // Update cooldowns for all players
+    this.players.forEach(p => {
+      if (p.currentSpecialCooldown > 0) {
+        const wasCooling = true;
+        p.currentSpecialCooldown -= delta;
+        if (wasCooling && p.currentSpecialCooldown <= 0) {
+          p.specialReadyEffect = 300;
+        }
       }
-    }
-    if (this.numPlayers === 2 && this.p2.currentSpecialCooldown > 0) {
-      const wasCooling = this.p2.currentSpecialCooldown > 0;
-      this.p2.currentSpecialCooldown -= delta;
-      if (wasCooling && this.p2.currentSpecialCooldown <= 0) {
-        this.p2.specialReadyEffect = 300; // 300ms effect
-      }
-    }
-
-    // Update special ready effects
-    if (this.p1.specialReadyEffect > 0) this.p1.specialReadyEffect -= delta;
-    if (this.numPlayers === 2 && this.p2.specialReadyEffect > 0) this.p2.specialReadyEffect -= delta;
+      if (p.specialReadyEffect > 0) p.specialReadyEffect -= delta;
+    });
 
     // Update and draw particles
     if (this.particles) {
@@ -1096,7 +1100,8 @@ class GameScene extends Phaser.Scene {
     p.specialBullets = state ? state.specialBullets : 1;
     p.specialCooldown = state ? state.specialCooldown : 2000;
     p.normalShotCooldown = state ? state.normalShotCooldown : 300;
-    p.hasShield = state ? state.hasShield : false;
+    p.shields = state ? state.shields : 0;
+    p.maxShields = state ? state.maxShields : 0;
     p.pierce = state ? state.pierce : 0;
     p.damageMultiplier = state ? state.damageMultiplier : 1.0;
     p.spreadBullets = state ? state.spreadBullets : 1;
@@ -1123,14 +1128,17 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  darkenColor(color, factor = 0.6) {
+    const r = ((color >> 16) & 0xff) * factor;
+    const g = ((color >> 8) & 0xff) * factor;
+    const b = (color & 0xff) * factor;
+    return (Math.floor(r) << 16) | (Math.floor(g) << 8) | Math.floor(b);
+  }
+
   drawPlayer(player, color, time) {
     const flash = player.invulnerable ? Math.floor(time / 100) % 2 === 0 : true;
     if (flash) {
-      // Darken base color
-      const rBase = ((color >> 16) & 0xff) * 0.6;
-      const gBase = ((color >> 8) & 0xff) * 0.6;
-      const bBase = (color & 0xff) * 0.6;
-      const darkColor = (Math.floor(rBase) << 16) | (Math.floor(gBase) << 8) | Math.floor(bBase);
+      const darkColor = this.darkenColor(color);
 
       // Base circle (darker)
       this.graphics.fillStyle(darkColor);
@@ -1146,10 +1154,13 @@ class GameScene extends Phaser.Scene {
         player.x + Math.cos(angle) * 20,
         player.y + Math.sin(angle) * 20);
     }
-    if (player.hasShield) {
+    // Draw shields (multiple circles for multiple shields)
+    if (player.shields > 0) {
       const pulse = Math.sin(time * 0.01) * 0.3 + 0.7;
-      this.graphics.lineStyle(3, 0x00ffff, pulse);
-      this.graphics.strokeCircle(player.x, player.y, 22);
+      for (let i = 0; i < Math.min(player.shields, 5); i++) {
+        this.graphics.lineStyle(2, 0x00ffff, pulse * (1 - i * 0.15));
+        this.graphics.strokeCircle(player.x, player.y, 21 + i * 3);
+      }
     }
     // Special ready effect (short burst when charged)
     if (player.specialReadyEffect > 0) {
@@ -1389,6 +1400,17 @@ class GameScene extends Phaser.Scene {
     this.graphics.fillPath();
   }
 
+  applyElementalProperties(bullet, elementalType, defaultColor) {
+    if (elementalType) {
+      bullet.elementalType = elementalType;
+      if (elementalType === 'ice') bullet.color = 0x00ccff;
+      else if (elementalType === 'fire') bullet.color = 0xff4400;
+      else if (elementalType === 'electric') bullet.color = 0xffff00;
+    } else {
+      bullet.color = defaultColor;
+    }
+  }
+
   shootPlayer(player, special) {
     const angle = player.angle * Math.PI / 180;
     const speed = special ? 250 : 400;
@@ -1432,14 +1454,7 @@ class GameScene extends Phaser.Scene {
         b.owner = player;
 
         // Aplicar elemento y color
-        if (elementalType) {
-          b.elementalType = elementalType;
-          if (elementalType === 'ice') b.color = 0x00ccff;
-          else if (elementalType === 'fire') b.color = 0xff4400;
-          else if (elementalType === 'electric') b.color = 0xffff00;
-        } else {
-          b.color = color;
-        }
+        this.applyElementalProperties(b, elementalType, color);
 
         this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
       }
@@ -1462,14 +1477,7 @@ class GameScene extends Phaser.Scene {
         b.owner = player;
 
         // Apply same element
-        if (elementalType) {
-          b.elementalType = elementalType;
-          if (elementalType === 'ice') b.color = 0x00ccff;
-          else if (elementalType === 'fire') b.color = 0xff4400;
-          else if (elementalType === 'electric') b.color = 0xffff00;
-        } else {
-          b.color = color;
-        }
+        this.applyElementalProperties(b, elementalType, color);
 
         this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
       }
@@ -1633,7 +1641,7 @@ class GameScene extends Phaser.Scene {
   shootCircle(src, count, offset = 0, spd = 200, rad = 20, lifetime = 3000) {
     for (let i = 0; i < count; i++) {
       const a = offset + i * Math.PI * 2 / count;
-      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime, false);
+      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime, true);
     }
   }
 
@@ -1673,7 +1681,7 @@ class GameScene extends Phaser.Scene {
       const a = Math.atan2(target.y - enemy.y, target.x - enemy.x);
       for (let i = 0; i < 3; i++) {
         const oa = a + (i - 1) * 0.15;
-        this.createEnemyBullet(enemy.x + Math.cos(oa) * 20, enemy.y + Math.sin(oa) * 20, Math.cos(oa) * s, Math.sin(oa) * s);
+        this.createEnemyBullet(enemy.x + Math.cos(oa) * 20, enemy.y + Math.sin(oa) * 20, Math.cos(oa) * s, Math.sin(oa) * s, 3000, true);
       }
       this.playSound(600, 0.1);
     }
@@ -1681,11 +1689,7 @@ class GameScene extends Phaser.Scene {
 
   drawEnemy(enemy) {
     const color = ENEMY_TYPES[enemy.type].color;
-    // Darken base color
-    const rBase = ((color >> 16) & 0xff) * 0.6;
-    const gBase = ((color >> 8) & 0xff) * 0.6;
-    const bBase = (color & 0xff) * 0.6;
-    const darkColor = (Math.floor(rBase) << 16) | (Math.floor(gBase) << 8) | Math.floor(bBase);
+    const darkColor = this.darkenColor(color);
 
     if (enemy.type === 'triangle') {
       // Base triangle (darker)
@@ -1910,8 +1914,8 @@ class GameScene extends Phaser.Scene {
       if (player.invulnerable) return;
 
       // Shield absorbs hit
-      if (player.hasShield) {
-        player.hasShield = false;
+      if (player.shields > 0) {
+        player.shields--;
         this.playSound(400, 0.2); // Sonido de shield roto
         // Efecto visual de shield roto
         this.createExplosionEffect(player.x, player.y, 0x00ffff, 12);
@@ -2853,8 +2857,9 @@ class GameScene extends Phaser.Scene {
         break;
 
       case 'shield':
-        player.hasShield = true;
-        message = powerupData.description;
+        player.shields++;
+        player.maxShields++;
+        message = `${powerupData.description} (${player.shields})`;
         break;
 
       case 'pierceShot':
@@ -3067,23 +3072,12 @@ class GameScene extends Phaser.Scene {
 
   openDoors() {
     this.doorsOpen = true;
-
-    // Disable door collision
-    this.doorWallTop.body.enable = false;
-    this.doorWallBottom.body.enable = false;
-    this.doorWallLeft.body.enable = false;
-    this.doorWallRight.body.enable = false;
-
+    this.doorWallArray.forEach(door => door.body.enable = false);
   }
 
   closeDoors() {
     this.doorsOpen = false;
-
-    // Reactivate door collision
-    this.doorWallTop.body.enable = true;
-    this.doorWallBottom.body.enable = true;
-    this.doorWallLeft.body.enable = true;
-    this.doorWallRight.body.enable = true;
+    this.doorWallArray.forEach(door => door.body.enable = true);
   }
 
   handleDoorOverlap(player, door) {
@@ -3093,9 +3087,6 @@ class GameScene extends Phaser.Scene {
   }
 
   savePlayerState(player) {
-    // Regenerar shield al cambiar de mapa
-    const regeneratedShield = player.hasShield || player.shield > 0;
-
     return {
       health: player.health,
       maxHealth: player.maxHealth,
@@ -3103,7 +3094,8 @@ class GameScene extends Phaser.Scene {
       specialBullets: player.specialBullets,
       specialCooldown: player.specialCooldown,
       normalShotCooldown: player.normalShotCooldown,
-      hasShield: regeneratedShield, // Shield se regenera
+      shields: player.maxShields, // Shields se restauran al máximo al pasar de mapa
+      maxShields: player.maxShields,
       pierce: player.pierce,
       damageMultiplier: player.damageMultiplier,
       spreadBullets: player.spreadBullets,
