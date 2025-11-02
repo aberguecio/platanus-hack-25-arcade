@@ -4,7 +4,7 @@
 // ===== DEBUG & SETTINGS =====
 const DEBUG_MODE = false;           // Set to true for testing
 const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
-const DEBUG_START_LEVEL = 3;       // Which level/map to start at (1, 2, 3)
+const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
 const DIFFICULTY = 1;            // Difficulty multiplier
@@ -245,7 +245,7 @@ const ENEMY_TYPES = {
     rotates: false
   },
   pentagon: {
-    health: 50,
+    health: 45,
     speed: 50,
     shootDelay: 5000,
     color: 0x00ffff,
@@ -265,7 +265,7 @@ const ENEMY_TYPES = {
   hexagon: {
     health: 60,
     speed: 30,
-    shootDelay: 300,
+    shootDelay: 6000,
     color: 0x00ff88,
     points: 80,
     size: 38,
@@ -638,8 +638,20 @@ class GameScene extends Phaser.Scene {
       restart: 'R'
     });
 
-    // Debug controls
+    // Debug controls (only included if DEBUG_MODE is true)
     if (DEBUG_MODE) {
+      this.debugSkipToWave = (targetWave) => {
+        this.enemies.clear(true, true);
+        this.enemyBullets.clear(true, true);
+        this.wave = targetWave - 1;
+        this.bossActive = false;
+        this.doorsOpen = false;
+        this.startNextWave();
+      };
+      this.debugKillAllEnemies = () => {
+        this.enemies.clear(true, true);
+        this.bossActive = false;
+      };
       this.input.keyboard.on('keydown-ONE', () => this.debugSkipToWave(5));
       this.input.keyboard.on('keydown-TWO', () => this.debugSkipToWave(10));
       this.input.keyboard.on('keydown-THREE', () => this.debugSkipToWave(20));
@@ -707,7 +719,7 @@ class GameScene extends Phaser.Scene {
     this.graphics.clear();
 
     // Background grid
-    this.graphics.lineStyle(1, 0x0a0a0a, 0.5);
+    this.graphics.lineStyle(1, 0x1a1a1a, 0.5);
     for (let i = 20; i < 780; i += 30) this.graphics.lineBetween(i, 20, i, 580);
     for (let j = 20; j < 580; j += 30) this.graphics.lineBetween(20, j, 780, j);
 
@@ -1040,8 +1052,20 @@ class GameScene extends Phaser.Scene {
   drawPlayer(player, color, time) {
     const flash = player.invulnerable ? Math.floor(time / 100) % 2 === 0 : true;
     if (flash) {
-      this.graphics.fillStyle(color);
+      // Darken base color
+      const rBase = ((color >> 16) & 0xff) * 0.6;
+      const gBase = ((color >> 8) & 0xff) * 0.6;
+      const bBase = (color & 0xff) * 0.6;
+      const darkColor = (Math.floor(rBase) << 16) | (Math.floor(gBase) << 8) | Math.floor(bBase);
+
+      // Base circle (darker)
+      this.graphics.fillStyle(darkColor);
       this.graphics.fillCircle(player.x, player.y, 15);
+      // Original color circle on top
+      this.graphics.fillStyle(color);
+      this.graphics.fillCircle(player.x - 1, player.y - 1, 12);
+
+      // Direction line
       this.graphics.lineStyle(3, color);
       const angle = player.angle * Math.PI / 180;
       this.graphics.lineBetween(player.x, player.y,
@@ -1151,12 +1175,14 @@ class GameScene extends Phaser.Scene {
   }
 
   // Helper: Create enemy bullet with auto-destroy
-  createEnemyBullet(x, y, vx, vy, lifetime = 3000) {
+  createEnemyBullet(x, y, vx, vy, lifetime = 3000, checkWalls = true, playSound = false) {
     // Check if spawn point collides with walls or obstacles
-    const checkCollision = (group) => group.children.entries.some(w =>
-      Math.abs(x - w.x) < w.body.halfWidth + 5 && Math.abs(y - w.y) < w.body.halfHeight + 5
-    );
-    if (checkCollision(this.walls) || checkCollision(this.obstacles)) return null;
+    if (checkWalls) {
+      const checkCollision = (group) => group.children.entries.some(w =>
+        Math.abs(x - w.x) < w.body.halfWidth + 5 && Math.abs(y - w.y) < w.body.halfHeight + 5
+      );
+      if (checkCollision(this.walls) || checkCollision(this.obstacles)) return null;
+    }
 
     const b = this.enemyBullets.create(x, y);
     b.setSize(10, 10);
@@ -1165,7 +1191,59 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(lifetime, () => {
       if (b && b.active) b.destroy();
     });
+
+    if (playSound) this.playSound(500, 0.1);
     return b;
+  }
+
+  // Helper: Process elemental effects and return multipliers
+  processElementalEffects(entity, time, onDeath) {
+    // Electrocuted: fully paralyzed
+    if (entity.isElectrocuted) {
+      const elapsed = time - entity.electrocutedTime;
+      if (elapsed < entity.electrocutedDuration) {
+        entity.setVelocity(0);
+        return null; // Signal to exit update
+      } else {
+        entity.isElectrocuted = false;
+      }
+    }
+
+    let speedMultiplier = 1.0;
+    let shootDelayMultiplier = 1.0;
+
+    // Frozen: slow movement and shooting
+    if (entity.isFrozen) {
+      const elapsed = time - entity.frozenTime;
+      if (elapsed < entity.frozenDuration) {
+        speedMultiplier = 0.3;
+        shootDelayMultiplier = 2.0;
+      } else {
+        entity.isFrozen = false;
+      }
+    }
+
+    // Burning: periodic damage
+    if (entity.isBurning) {
+      const elapsed = time - entity.burnStartTime;
+      if (elapsed < entity.burnDuration) {
+        if (time - entity.burnTickTime > 500) {
+          entity.health -= 3;
+          entity.burnTickTime = time;
+          this.playSound(200, 0.03);
+
+          if (entity.health <= 0) {
+            onDeath(entity);
+            entity.destroy();
+            return null; // Signal to exit update
+          }
+        }
+      } else {
+        entity.isBurning = false;
+      }
+    }
+
+    return { speedMultiplier, shootDelayMultiplier };
   }
 
   // Helper: Apply elemental status effects (electrocute, freeze, burn)
@@ -1431,64 +1509,22 @@ class GameScene extends Phaser.Scene {
   }
 
   updateEnemy(enemy, time, delta) {
-    // Electrocuted: fully paralyzed
-    if (enemy.isElectrocuted) {
-      const elapsed = time - enemy.electrocutedTime;
-      if (elapsed < enemy.electrocutedDuration) {
-        // Paralyzed
-        enemy.setVelocity(0);
-        return; // Salir completamente de updateEnemy
+    // Process elemental effects
+    const effects = this.processElementalEffects(enemy, time, (e) => {
+      const deathPosition = { x: e.x, y: e.y };
+      if (e.isBoss) {
+        this.handleBossDeath(e, deathPosition);
       } else {
-        enemy.isElectrocuted = false; // Effect ends
+        this.lastEnemyPosition = deathPosition;
+        const typeData = ENEMY_TYPES[e.type];
+        this.score += typeData.points;
+        this.scoreText.setText('Score: ' + this.score);
+        this.playSound(500, 0.1);
       }
-    }
+    });
+    if (!effects) return; // Entity paralyzed or dead
 
-    // Manejo de estados elementales
-    // Frozen: reduce speed
-    let speedMultiplier = 1.0;
-    let shootDelayMultiplier = 1.0;
-
-    if (enemy.isFrozen) {
-      const elapsed = time - enemy.frozenTime;
-      if (elapsed < enemy.frozenDuration) {
-        speedMultiplier = 0.3; // 70% slower
-        shootDelayMultiplier = 2.0; // Shoot 2x slower
-      } else {
-        enemy.isFrozen = false; // Effect ends
-      }
-    }
-
-    // Burning: periodic damage
-    if (enemy.isBurning) {
-      const elapsed = time - enemy.burnStartTime;
-      if (elapsed < enemy.burnDuration) {
-        // Apply damage every 500ms
-        if (time - enemy.burnTickTime > 500) {
-          enemy.health -= 3; // 3 damage per tick
-          enemy.burnTickTime = time;
-          this.playSound(200, 0.03);
-
-          if (enemy.health <= 0) {
-            // Save position before destroy
-            const deathPosition = { x: enemy.x, y: enemy.y };
-
-            if (enemy.isBoss) {
-              this.handleBossDeath(enemy, deathPosition);
-            } else {
-              this.lastEnemyPosition = deathPosition;
-              const typeData = ENEMY_TYPES[enemy.type];
-              this.score += typeData.points;
-              this.scoreText.setText('Score: ' + this.score);
-              this.playSound(500, 0.1);
-            }
-            enemy.destroy();
-            return; // Exit updateEnemy
-          }
-        }
-      } else {
-        enemy.isBurning = false; // Effect ends
-      }
-    }
+    const { speedMultiplier, shootDelayMultiplier } = effects;
 
     // Move to nearest player
     const target = this.getNearestPlayer(enemy.x, enemy.y);
@@ -1503,12 +1539,6 @@ class GameScene extends Phaser.Scene {
       enemy.angle = Math.atan2(dy, dx) * 180 / Math.PI;
     }
 
-    // Spinner: constant rotation
-    if (enemy.type === 'spinner') {
-      enemy.angle += 3 * speedMultiplier; // Rotate slower if frozen
-      if (enemy.angle >= 360) enemy.angle -= 360;
-    }
-
     if (dist > 150) {
       const effectiveSpeed = enemy.speed * speedMultiplier;
       enemy.setVelocity(dx/dist * effectiveSpeed, dy/dist * effectiveSpeed);
@@ -1516,54 +1546,36 @@ class GameScene extends Phaser.Scene {
       enemy.setVelocity(0);
     }
 
-    // Hexagon: special shooting pattern (6s rapid fire, 2s pause)
-    if (enemy.type === 'hexagon') {
-      if (!enemy.shootingCycle) {
-        enemy.shootingCycle = 0; // Track time in current cycle
-      }
-      enemy.shootingCycle += delta;
-
-      const cycleTime = 6000; // 4s shooting + 2s pause
-      const shootingDuration = 4000;
-      const cyclePosition = enemy.shootingCycle % cycleTime;
-
-      if (cyclePosition < shootingDuration) {
-        // Shooting phase
-        const effectiveShootDelay = enemy.shootDelay * shootDelayMultiplier;
-        // Wait 1s after spawn
-        if (time - enemy.spawnTime > 1000 && time - enemy.lastShot > effectiveShootDelay) {
-          this.shootEnemy(enemy, target, time);
-          enemy.lastShot = time;
-        }
-      }
-      // Otherwise, pause phase - don't shoot
-    } else {
-      // Normal shooting for other enemies
-      const effectiveShootDelay = enemy.shootDelay * shootDelayMultiplier;
-      // Wait 1s after spawn
-      if (time - enemy.spawnTime > 1000 && time - enemy.lastShot > effectiveShootDelay) {
-        this.shootEnemy(enemy, target, time);
-        enemy.lastShot = time;
-      }
+    // Normal shooting for all enemies (hexagon uses spiral which has built-in delay)
+    const effectiveShootDelay = enemy.shootDelay * shootDelayMultiplier;
+    // Wait 1s after spawn
+    if (time - enemy.spawnTime > 1000 && time - enemy.lastShot > effectiveShootDelay) {
+      this.shootEnemy(enemy, target, time);
+      enemy.lastShot = time;
     }
   }
 
-  // Helper: shoot N bullets in circle pattern (reused by square, pentagon, hexagon, boss waves)
-  shootCircle(src, count, offset = 0, spd = 200, rad = 20) {
+  // Helper: shoot N bullets in circle pattern (reused by square, pentagon, boss waves)
+  shootCircle(src, count, offset = 0, spd = 200, rad = 20, lifetime = 3000) {
     for (let i = 0; i < count; i++) {
       const a = offset + i * Math.PI * 2 / count;
-      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd);
+      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime, false);
     }
   }
 
   // Helper: shoot single aimed bullet (reused by triangle, laser boss)
-  shootAimed(src, tgt, spd, lifetime, isBoss = false) {
+  shootAimed(src, tgt, spd, lifetime = 3000, isBoss = false) {
     const a = Math.atan2(tgt.y - src.y, tgt.x - src.x);
-    if (isBoss) {
-      this.shootBossBullet(src.x, src.y, a, spd, lifetime);
-    } else {
-      this.createEnemyBullet(src.x + Math.cos(a) * 20, src.y + Math.sin(a) * 20, Math.cos(a) * spd, Math.sin(a) * spd);
-    }
+    const offset = isBoss ? 0 : 20;
+    this.createEnemyBullet(
+      src.x + Math.cos(a) * offset,
+      src.y + Math.sin(a) * offset,
+      Math.cos(a) * spd,
+      Math.sin(a) * spd,
+      lifetime,
+      !isBoss,
+      isBoss
+    );
   }
 
   shootEnemy(enemy, target) {
@@ -1571,10 +1583,8 @@ class GameScene extends Phaser.Scene {
     if (enemy.type === 'triangle') {
       this.shootAimed(enemy, target, s);
       this.playSound(400, 0.1);
-      this.createMuzzleFlash(enemy.x, enemy.y, Math.atan2(target.y - enemy.y, target.x - enemy.x), 0xff0000, 4);
     } else if (enemy.type === 'square') {
       this.shootCircle(enemy, 4, 0, s);
-      for (let i = 0; i < 4; i++) this.createMuzzleFlash(enemy.x, enemy.y, i * Math.PI / 2, 0xff0000, 3);
       this.playSound(400, 0.1);
     } else if (enemy.type === 'pentagon') {
       this.shootCircle(enemy, 5, 0, s);
@@ -1582,7 +1592,8 @@ class GameScene extends Phaser.Scene {
       this.time.delayedCall(250, () => { if (enemy.active) { this.shootCircle(enemy, 5, Math.PI / 5, s); this.playSound(450, 0.12); } });
       this.time.delayedCall(500, () => { if (enemy.active) { this.shootCircle(enemy, 5, 0, s); this.playSound(450, 0.12); } });
     } else if (enemy.type === 'hexagon') {
-      this.shootCircle(enemy, 6, 0, s);
+      // Spiral: 2 arms, 4 bullets each, half rotation (π radians)
+      this.shootSpiral(enemy, 8, 2, Math.PI*2, 0, s, 3000, 200);
       this.playSound(500, 0.1);
     } else if (enemy.type === 'spinner') {
       const a = Math.atan2(target.y - enemy.y, target.x - enemy.x);
@@ -1595,25 +1606,59 @@ class GameScene extends Phaser.Scene {
   }
 
   drawEnemy(enemy) {
-    this.graphics.fillStyle(ENEMY_TYPES[enemy.type].color);
+    const color = ENEMY_TYPES[enemy.type].color;
+    // Darken base color
+    const rBase = ((color >> 16) & 0xff) * 0.6;
+    const gBase = ((color >> 8) & 0xff) * 0.6;
+    const bBase = (color & 0xff) * 0.6;
+    const darkColor = (Math.floor(rBase) << 16) | (Math.floor(gBase) << 8) | Math.floor(bBase);
+
     if (enemy.type === 'triangle') {
+      // Base triangle (darker)
+      this.graphics.fillStyle(darkColor);
       this.graphics.save();
       this.graphics.translateCanvas(enemy.x, enemy.y);
       this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
       this.graphics.fillTriangle(15, 0, -10, -12, -10, 12);
       this.graphics.restore();
+      // Original color triangle on top
+      this.graphics.fillStyle(color);
+      this.graphics.save();
+      this.graphics.translateCanvas(enemy.x - 2, enemy.y - 2);
+      this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
+      this.graphics.fillTriangle(12, 0, -8, -10, -8, 10);
+      this.graphics.restore();
     } else if (enemy.type === 'square') {
+      this.graphics.fillStyle(darkColor);
       this.graphics.fillRect(enemy.x - 15, enemy.y - 15, 30, 30);
+      this.graphics.fillStyle(color);
+      this.graphics.fillRect(enemy.x - 13, enemy.y - 13, 24, 24);
     } else if (enemy.type === 'pentagon') {
+      this.graphics.fillStyle(darkColor);
       this.drawPolygon(enemy.x, enemy.y, 5, 17, null, -Math.PI / 2);
+      this.graphics.fillStyle(color);
+      this.drawPolygon(enemy.x - 1, enemy.y - 1, 5, 14, null, -Math.PI / 2);
     } else if (enemy.type === 'hexagon') {
+      this.graphics.fillStyle(darkColor);
       this.drawPolygon(enemy.x, enemy.y, 6, 19, null, -Math.PI / 2);
+      this.graphics.fillStyle(color);
+      this.drawPolygon(enemy.x - 1, enemy.y - 1, 6, 15, null, -Math.PI / 2);
     } else if (enemy.type === 'spinner') {
+      // Base spinner (darker)
+      this.graphics.fillStyle(darkColor);
       this.graphics.save();
       this.graphics.translateCanvas(enemy.x, enemy.y);
       this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
       this.graphics.fillTriangle(0, -15, -10, 5, 10, 5);
       this.graphics.fillTriangle(0, 15, -10, -5, 10, -5);
+      this.graphics.restore();
+      // Original color spinner on top
+      this.graphics.fillStyle(color);
+      this.graphics.save();
+      this.graphics.translateCanvas(enemy.x - 2, enemy.y - 2);
+      this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
+      this.graphics.fillTriangle(0, -12, -8, 4, 8, 4);
+      this.graphics.fillTriangle(0, 12, -8, -4, 8, -4);
       this.graphics.restore();
     }
   }
@@ -2317,53 +2362,14 @@ class GameScene extends Phaser.Scene {
   }
 
   updateBoss(boss, time, delta) {
-    // Electrocuted: fully paralyzed
-    if (boss.isElectrocuted) {
-      const elapsed = time - boss.electrocutedTime;
-      if (elapsed < boss.electrocutedDuration) {
-        // Paralyzed
-        boss.setVelocity(0);
-        return; // Salir completamente de updateBoss
-      } else {
-        boss.isElectrocuted = false; // Effect ends
-      }
-    }
+    // Process elemental effects
+    const effects = this.processElementalEffects(boss, time, (b) => {
+      const deathPosition = { x: b.x, y: b.y };
+      this.handleBossDeath(b, deathPosition);
+    });
+    if (!effects) return; // Entity paralyzed or dead
 
-    // Manejo de estados elementales
-    let speedMultiplier = 1.0;
-    let shootDelayMultiplier = 1.0;
-
-    if (boss.isFrozen) {
-      const elapsed = time - boss.frozenTime;
-      if (elapsed < boss.frozenDuration) {
-        speedMultiplier = 0.3; // 70% slower
-        shootDelayMultiplier = 2.0; // Shoot 2x slower
-      } else {
-        boss.isFrozen = false; // Effect ends
-      }
-    }
-
-    // Burning: periodic damage
-    if (boss.isBurning) {
-      const elapsed = time - boss.burnStartTime;
-      if (elapsed < boss.burnDuration) {
-        // Apply damage every 500ms
-        if (time - boss.burnTickTime > 500) {
-          boss.health -= 3; // 3 damage per tick
-          boss.burnTickTime = time;
-          this.playSound(200, 0.03);
-
-          if (boss.health <= 0) {
-            const deathPosition = { x: boss.x, y: boss.y };
-            this.handleBossDeath(boss, deathPosition);
-            boss.destroy();
-            return; // Exit updateBoss
-          }
-        }
-      } else {
-        boss.isBurning = false; // Effect ends
-      }
-    }
+    const { speedMultiplier, shootDelayMultiplier } = effects;
 
     if (boss.bossType === 'pattern') {
       // BOSS 1: Circular movement
@@ -2402,10 +2408,10 @@ class GameScene extends Phaser.Scene {
         } else if (boss.attackPhase === 2) {
           // Fase ondas: disparar 2 ondas de balas
           if (!boss.wave1Fired && phaseTime >= 0) {
-            this.shootWave(boss, 50, 0, 200, 3000, 20);
+            this.shootCircle(boss, 50, 0, 200, 20, 3000);
             boss.wave1Fired = true;
           } else if (!boss.wave2Fired && phaseTime >= 500) {
-            this.shootWave(boss, 50, 0, 200, 3000, 20);
+            this.shootCircle(boss, 50, 0, 200, 20, 3000);
             boss.wave2Fired = true;
           } else if (phaseTime >= 2000) {
             boss.attackPhase = 3;
@@ -2542,7 +2548,7 @@ class GameScene extends Phaser.Scene {
 
         if (pattern === 'wave') {
           if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
-            this.shootWave(boss, boss.starPoints * 2, 0, 200, 3000, 0);
+            this.shootCircle(boss, boss.starPoints * 2, 0, 200, 0, 3000);
             boss.lastShot = time;
           }
         } else if (pattern === 'spiral') {
@@ -2639,7 +2645,7 @@ class GameScene extends Phaser.Scene {
         if (twin.bossType === 'twin1') {
           // Twin 1: circular waves
           if (time - twin.lastShot > 300 * shootDelayMultiplier) {
-            this.shootWave(twin, 10, 0, 200, 3000, 0);
+            this.shootCircle(twin, 10, 0, 200, 0, 3000);
             twin.lastShot = time;
           }
         } else {
@@ -2928,35 +2934,6 @@ class GameScene extends Phaser.Scene {
 
   // ===== SISTEMA MODULAR DE DISPAROS DE BOSSES =====
 
-  // Generic bullet creator
-  shootBossBullet(x, y, angle, speed, lifetime, playSound = true) {
-    const b = this.enemyBullets.create(x, y);
-    b.setSize(10, 10);
-    b.setVisible(false);
-    b.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-    this.time.delayedCall(lifetime, () => { if (b && b.active) b.destroy(); });
-
-    // Auto sound per bullet
-    if (playSound) {
-      this.playSound(500, 0.1);
-    }
-
-    return b;
-  }
-
-  // Pattern: Circular wave
-  // bulletCount: bullets in circle
-  // angleOffset: initial angle offset (rad)
-  // spawnRadius: spawn radius
-  shootWave(source, bulletCount, angleOffset, speed, lifetime, spawnRadius = 0) {
-    for (let i = 0; i < bulletCount; i++) {
-      const angle = angleOffset + (i * Math.PI * 2 / bulletCount);
-      const x = source.x + Math.cos(angle) * spawnRadius;
-      const y = source.y + Math.sin(angle) * spawnRadius;
-      this.shootBossBullet(x, y, angle, speed, lifetime);
-    }
-  }
-
   // Pattern: Complete spiral
   // bulletCount: bullets per arm
   // arms: spiral arms
@@ -2973,7 +2950,7 @@ class GameScene extends Phaser.Scene {
 
         for (let arm = 0; arm < arms; arm++) {
           const armAngle = angle + (arm * Math.PI * 2 / arms);
-          this.shootBossBullet(source.x, source.y, armAngle, speed, lifetime);
+          this.createEnemyBullet(source.x, source.y, Math.cos(armAngle) * speed, Math.sin(armAngle) * speed, lifetime, false, true);
         }
       });
     }
@@ -3101,20 +3078,6 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // Debug functions
-  debugSkipToWave(targetWave) {
-    this.enemies.clear(true, true);
-    this.enemyBullets.clear(true, true);
-    this.wave = targetWave - 1;
-    this.bossActive = false;
-    this.doorsOpen = false;
-    this.startNextWave();
-  }
-
-  debugKillAllEnemies() {
-    this.enemies.clear(true, true);
-    this.bossActive = false;
-  }
 }
 
 // GAME CONFIG
