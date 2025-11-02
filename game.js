@@ -3,11 +3,11 @@
 
 // ===== DEBUG & SETTINGS =====
 const DEBUG_MODE = false;           // Set to true for testing
-const DEBUG_START_WAVE = 30;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
-const DEBUG_START_LEVEL = 4;       // Which level/map to start at (1, 2, 3)
+const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
+const DEBUG_START_LEVEL = 3;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
-const DIFFICULTY = 1.0;            // Difficulty multiplier
+const DIFFICULTY = 1;            // Difficulty multiplier
 // Examples:
 // 0.1 = Very Easy (10% enemy health, 10% enemy count, faster shooting)
 // 0.5 = Easy (50% enemy health, 50% enemy count)
@@ -584,61 +584,11 @@ class GameScene extends Phaser.Scene {
     this.loadMap();
 
     // Players (sistema de hearts)
-    this.p1 = this.physics.add.sprite(300, 300, null);
-    this.p1.setSize(30, 30);
-    this.p1.setVisible(false);
-    this.p1.health = this.p1State ? this.p1State.health : 5;
-    this.p1.maxHealth = this.p1State ? this.p1State.maxHealth : 5;
-    this.p1.baseSpeed = 200;
-    this.p1.speed = this.p1State ? this.p1State.speed : 200;
-    this.p1.angle = 0;
-    this.p1.currentSpecialCooldown = 0;
-
-    // Powerup stats
-    this.p1.specialBullets = this.p1State ? this.p1State.specialBullets : 1;
-    this.p1.specialCooldown = this.p1State ? this.p1State.specialCooldown : 2000;
-    this.p1.normalShotCooldown = this.p1State ? this.p1State.normalShotCooldown : 300;
-    this.p1.hasShield = this.p1State ? this.p1State.hasShield : false;
-    this.p1.pierce = this.p1State ? this.p1State.pierce : 0;
-    this.p1.damageMultiplier = this.p1State ? this.p1State.damageMultiplier : 1.0;
-    this.p1.spreadBullets = this.p1State ? this.p1State.spreadBullets : 1;
-    this.p1.homingStrength = this.p1State ? this.p1State.homingStrength : 0;
-    this.p1.bounceCount = this.p1State ? this.p1State.bounceCount : 0;
-    this.p1.hasBackShot = this.p1State ? this.p1State.hasBackShot : false;
-    // Sistema elemental: duraciones (cada powerup suma 1s)
-    this.p1.iceDuration = this.p1State ? this.p1State.iceDuration : 0; // 4s base + 1s por powerup
-    this.p1.fireDuration = this.p1State ? this.p1State.fireDuration : 0; // 3s base + 1s por powerup
-    this.p1.electricDuration = this.p1State ? this.p1State.electricDuration : 0; // 2s base + 1s por powerup
-
+    this.p1 = this.initPlayer(300, 300, this.p1State);
     this.players = [this.p1];
 
     if (this.numPlayers === 2) {
-      this.p2 = this.physics.add.sprite(500, 300, null);
-      this.p2.setSize(30, 30);
-      this.p2.setVisible(false);
-      this.p2.health = this.p2State ? this.p2State.health : 5;
-      this.p2.maxHealth = this.p2State ? this.p2State.maxHealth : 5;
-      this.p2.baseSpeed = 200;
-      this.p2.speed = this.p2State ? this.p2State.speed : 200;
-      this.p2.angle = 0;
-      this.p2.currentSpecialCooldown = 0;
-
-      // Powerup stats
-      this.p2.specialBullets = this.p2State ? this.p2State.specialBullets : 1;
-      this.p2.specialCooldown = this.p2State ? this.p2State.specialCooldown : 2000;
-      this.p2.normalShotCooldown = this.p2State ? this.p2State.normalShotCooldown : 300;
-      this.p2.hasShield = this.p2State ? this.p2State.hasShield : false;
-      this.p2.pierce = this.p2State ? this.p2State.pierce : 0;
-      this.p2.damageMultiplier = this.p2State ? this.p2State.damageMultiplier : 1.0;
-      this.p2.spreadBullets = this.p2State ? this.p2State.spreadBullets : 1;
-      this.p2.homingStrength = this.p2State ? this.p2State.homingStrength : 0;
-      this.p2.bounceCount = this.p2State ? this.p2State.bounceCount : 0;
-      this.p2.hasBackShot = this.p2State ? this.p2State.hasBackShot : false;
-      // Sistema elemental: duraciones (cada powerup suma 1s)
-      this.p2.iceDuration = this.p2State ? this.p2State.iceDuration : 0;
-      this.p2.fireDuration = this.p2State ? this.p2State.fireDuration : 0;
-      this.p2.electricDuration = this.p2State ? this.p2State.electricDuration : 0;
-
+      this.p2 = this.initPlayer(500, 300, this.p2State);
       this.players.push(this.p2);
     }
 
@@ -796,41 +746,11 @@ class GameScene extends Phaser.Scene {
     });
 
     // Draw players
-    this.graphics.fillStyle(0x00ff00);
-    this.graphics.fillCircle(this.p1.x, this.p1.y, 15);
-    this.graphics.lineStyle(3, 0x00ff00);
-    const angle1 = this.p1.angle * Math.PI / 180;
-    this.graphics.lineBetween(this.p1.x, this.p1.y,
-      this.p1.x + Math.cos(angle1) * 20,
-      this.p1.y + Math.sin(angle1) * 20);
-
-    // Shield visual P1
-    if (this.p1.hasShield) {
-      const pulse = Math.sin(time * 0.01) * 0.3 + 0.7;
-      this.graphics.lineStyle(3, 0x00ffff, pulse);
-      this.graphics.strokeCircle(this.p1.x, this.p1.y, 22);
-    }
-
-    // Special cooldown bar P1
+    this.drawPlayer(this.p1, 0x00ff00, time);
     this.drawCooldownBar(20, 45, this.p1.currentSpecialCooldown);
 
     if (this.numPlayers === 2) {
-      this.graphics.fillStyle(0x0099ff);
-      this.graphics.fillCircle(this.p2.x, this.p2.y, 15);
-      this.graphics.lineStyle(3, 0x0099ff);
-      const angle2 = this.p2.angle * Math.PI / 180;
-      this.graphics.lineBetween(this.p2.x, this.p2.y,
-        this.p2.x + Math.cos(angle2) * 20,
-        this.p2.y + Math.sin(angle2) * 20);
-
-      // Shield visual P2
-      if (this.p2.hasShield) {
-        const pulse = Math.sin(time * 0.01) * 0.3 + 0.7;
-        this.graphics.lineStyle(3, 0x00ffff, pulse);
-        this.graphics.strokeCircle(this.p2.x, this.p2.y, 22);
-      }
-
-      // Special cooldown bar P2
+      this.drawPlayer(this.p2, 0x0099ff, time);
       this.drawCooldownBar(680, 45, this.p2.currentSpecialCooldown);
     }
 
@@ -1010,11 +930,23 @@ class GameScene extends Phaser.Scene {
 
     // Update cooldowns
     if (this.p1.currentSpecialCooldown > 0) {
+      const wasCooling = this.p1.currentSpecialCooldown > 0;
       this.p1.currentSpecialCooldown -= delta;
+      if (wasCooling && this.p1.currentSpecialCooldown <= 0) {
+        this.p1.specialReadyEffect = 300; // 300ms effect
+      }
     }
     if (this.numPlayers === 2 && this.p2.currentSpecialCooldown > 0) {
+      const wasCooling = this.p2.currentSpecialCooldown > 0;
       this.p2.currentSpecialCooldown -= delta;
+      if (wasCooling && this.p2.currentSpecialCooldown <= 0) {
+        this.p2.specialReadyEffect = 300; // 300ms effect
+      }
     }
+
+    // Update special ready effects
+    if (this.p1.specialReadyEffect > 0) this.p1.specialReadyEffect -= delta;
+    if (this.numPlayers === 2 && this.p2.specialReadyEffect > 0) this.p2.specialReadyEffect -= delta;
 
     // Update and draw particles
     if (this.particles) {
@@ -1040,6 +972,35 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  initPlayer(x, y, state) {
+    const p = this.physics.add.sprite(x, y, null);
+    p.setSize(30, 30);
+    p.setVisible(false);
+    p.health = state ? state.health : 5;
+    p.maxHealth = state ? state.maxHealth : 5;
+    p.baseSpeed = 200;
+    p.speed = state ? state.speed : 200;
+    p.angle = 0;
+    p.currentSpecialCooldown = 0;
+    p.invulnerable = false;
+    p.lastHitTime = 0;
+    p.specialReadyEffect = 0;
+    p.specialBullets = state ? state.specialBullets : 1;
+    p.specialCooldown = state ? state.specialCooldown : 2000;
+    p.normalShotCooldown = state ? state.normalShotCooldown : 300;
+    p.hasShield = state ? state.hasShield : false;
+    p.pierce = state ? state.pierce : 0;
+    p.damageMultiplier = state ? state.damageMultiplier : 1.0;
+    p.spreadBullets = state ? state.spreadBullets : 1;
+    p.homingStrength = state ? state.homingStrength : 0;
+    p.bounceCount = state ? state.bounceCount : 0;
+    p.hasBackShot = state ? state.hasBackShot : false;
+    p.iceDuration = state ? state.iceDuration : 0;
+    p.fireDuration = state ? state.fireDuration : 0;
+    p.electricDuration = state ? state.electricDuration : 0;
+    return p;
+  }
+
   drawCooldownBar(x, y, cooldown) {
     const barWidth = 100;
     const barHeight = 8;
@@ -1051,6 +1012,32 @@ class GameScene extends Phaser.Scene {
     if (percent > 0) {
       this.graphics.fillStyle(percent >= 1 ? 0x00ff00 : 0xffaa00);
       this.graphics.fillRect(x, y, barWidth * percent, barHeight);
+    }
+  }
+
+  drawPlayer(player, color, time) {
+    const flash = player.invulnerable ? Math.floor(time / 100) % 2 === 0 : true;
+    if (flash) {
+      this.graphics.fillStyle(color);
+      this.graphics.fillCircle(player.x, player.y, 15);
+      this.graphics.lineStyle(3, color);
+      const angle = player.angle * Math.PI / 180;
+      this.graphics.lineBetween(player.x, player.y,
+        player.x + Math.cos(angle) * 20,
+        player.y + Math.sin(angle) * 20);
+    }
+    if (player.hasShield) {
+      const pulse = Math.sin(time * 0.01) * 0.3 + 0.7;
+      this.graphics.lineStyle(3, 0x00ffff, pulse);
+      this.graphics.strokeCircle(player.x, player.y, 22);
+    }
+    // Special ready effect (short burst when charged)
+    if (player.specialReadyEffect > 0) {
+      const progress = 1 - (player.specialReadyEffect / 200);
+      const radius = 15 + progress * 8; // Expands from 15 to 25
+      const alpha = 1 - progress; // Fades out
+      this.graphics.lineStyle(3, 0xffff00, alpha);
+      this.graphics.strokeCircle(player.x, player.y, radius);
     }
   }
 
@@ -1143,6 +1130,12 @@ class GameScene extends Phaser.Scene {
 
   // Helper: Create enemy bullet with auto-destroy
   createEnemyBullet(x, y, vx, vy, lifetime = 3000) {
+    // Check if spawn point collides with walls or obstacles
+    const checkCollision = (group) => group.children.entries.some(w =>
+      Math.abs(x - w.x) < w.body.halfWidth + 5 && Math.abs(y - w.y) < w.body.halfHeight + 5
+    );
+    if (checkCollision(this.walls) || checkCollision(this.obstacles)) return null;
+
     const b = this.enemyBullets.create(x, y);
     b.setSize(10, 10);
     b.setVisible(false);
@@ -1772,6 +1765,9 @@ class GameScene extends Phaser.Scene {
     bullet.destroy();
 
     if (!DEBUG_GODMODE) {
+      // Check invulnerability
+      if (player.invulnerable) return;
+
       // Shield absorbs hit
       if (player.hasShield) {
         player.hasShield = false;
@@ -1790,6 +1786,13 @@ class GameScene extends Phaser.Scene {
 
       // Screen shake
       this.cameras.main.shake(200, 0.005);
+
+      // Set invulnerability for 1 second
+      player.invulnerable = true;
+      player.lastHitTime = this.time.now;
+      this.time.delayedCall(300, () => {
+        player.invulnerable = false;
+      });
 
       if (player.health <= 0) {
         // Mark player as dead
