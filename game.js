@@ -1827,6 +1827,11 @@ class GameScene extends Phaser.Scene {
 
         // Efecto visual de muerte de enemigo normal
         this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff8800, 10);
+
+        // 1% chance to drop a heart
+        if (Math.random() < 0.01) {
+          this.spawnPowerup({ x: deathPosition.x, y: deathPosition.y }, 'heart');
+        }
       }
       enemy.destroy();
     }
@@ -2876,11 +2881,13 @@ class GameScene extends Phaser.Scene {
     const d = POWERUP_TYPES[powerup.type];
     const x = powerup.x, y = powerup.y;
 
+    // Draw circle background for all powerups except hearts
+    if (powerup.type !== 'heart') {
+      this.graphics.fillCircle(x, y, 12);
+      this.graphics.lineStyle(2, 0xffffff, p);
+      this.graphics.strokeCircle(x, y, 12);
+    }
     this.graphics.fillStyle(d.color, p);
-    this.graphics.fillCircle(x, y, 12);
-    this.graphics.lineStyle(2, 0xffffff, p);
-    this.graphics.strokeCircle(x, y, 12);
-
     this.graphics.save();
     this.graphics.translateCanvas(x, y);
     this.graphics.fillStyle(0xffffff, p);
