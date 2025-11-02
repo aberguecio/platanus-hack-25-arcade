@@ -3,8 +3,8 @@
 
 // ===== DEBUG & SETTINGS =====
 const DEBUG_MODE = false;           // Set to true for testing
-const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
-const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
+const DEBUG_START_WAVE = 30;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
+const DEBUG_START_LEVEL = 4;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 
 const DIFFICULTY = 1.0;            // Difficulty multiplier
@@ -2511,18 +2511,10 @@ class GameScene extends Phaser.Scene {
 
       boss.angle += delta * 0.05; // Rotate
 
-      // Attack patterns
+      // Attack patterns using shootDelay
       if (time - boss.spawnTime > 1000) {
-        if (boss.patternTimer === 0) boss.patternTimer = time;
-        const elapsed = time - boss.patternTimer;
-
-        if (elapsed > 3000) { // Switch pattern every 3s
-          boss.currentPattern = (boss.currentPattern + 1) % boss.attackPatterns.length;
-          boss.patternTimer = time;
-          boss.spiralFired = false;
-        }
-
         const pattern = boss.attackPatterns[boss.currentPattern];
+
         if (pattern === 'wave') {
           if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
             this.shootWave(boss, boss.starPoints * 2, 0, 200, 3000, 0);
@@ -2530,12 +2522,36 @@ class GameScene extends Phaser.Scene {
           }
         } else if (pattern === 'spiral') {
           if (!boss.spiralFired) {
-            this.shootSpiral(boss, 30, boss.starPoints, Math.PI * 2, 0, 250, 3000, 80);
+            const bulletCount = 30;
+            const delayBetween = 80;
+            const spiralDuration = bulletCount * delayBetween; // 2400ms
+            this.shootSpiral(boss, bulletCount, boss.starPoints, Math.PI * 2, 0, 250, 3000, delayBetween);
             boss.spiralFired = true;
+            boss.lastShot = time;
+            // Switch pattern after spiral completes + shootDelay cooldown
+            this.time.delayedCall(spiralDuration + boss.shootDelay * shootDelayMultiplier, () => {
+              if (boss.active) {
+                boss.currentPattern = (boss.currentPattern + 1) % boss.attackPatterns.length;
+                boss.spiralFired = false;
+              }
+            });
           }
         } else if (pattern === 'laser') {
+          // Laser: 5-bullet burst
           if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
-            this.shootAimed(boss, target, 300, 2000, true);
+            for (let i = 0; i < 5; i++) {
+              this.time.delayedCall(i * 50, () => {
+                if (boss.active) this.shootAimed(boss, target, 300, 2000, true);
+              });
+            }
+            boss.lastShot = time;
+          }
+        }
+
+        // Auto-switch for wave/laser after 3 shots
+        if (pattern !== 'spiral') {
+          if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier * 3.5) {
+            boss.currentPattern = (boss.currentPattern + 1) % boss.attackPatterns.length;
             boss.lastShot = time;
           }
         }
