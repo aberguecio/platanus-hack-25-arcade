@@ -111,13 +111,22 @@ class MenuScene extends Phaser.Scene {
     this.selectedOption = 0; // 0 = 1 player, 1 = 2 players
     this.startBackgroundMusic();
 
-    // Title
-    this.add.text(400, 120, 'OBSCURANTISM', {
+    // Title with glow effect
+    this.titleText = this.add.text(400, 120, 'OBSCURANTISM', {
       fontSize: '64px',
       fontFamily: 'Arial',
       color: '#ff0000',
       stroke: '#000',
       strokeThickness: 8
+    }).setOrigin(0.5);
+
+    // Subtitle
+    this.add.text(400, 180, 'Wave Survival Arena', {
+      fontSize: '20px',
+      fontFamily: 'Arial',
+      color: '#666',
+      stroke: '#000',
+      strokeThickness: 4
     }).setOrigin(0.5);
 
     // Menu options text
@@ -133,63 +142,20 @@ class MenuScene extends Phaser.Scene {
       color: '#0099ff'
     }).setOrigin(0.5);
 
-    // Controls infographic (bottom third)
-    const controlsY = 400;
-    this.add.text(400, controlsY, 'CONTROLS', {
-      fontSize: '24px',
-      fontFamily: 'Arial',
-      color: '#ffff00'
-    }).setOrigin(0.5);
+    // Controls infographic
+    const cy = 400;
+    this.add.text(400, cy, 'CONTROLS', {fontSize: '24px', fontFamily: 'Arial', color: '#ffff00'}).setOrigin(0.5);
 
-    // Player 1 controls
-    this.add.text(200, controlsY + 40, 'PLAYER 1', {
-      fontSize: '18px',
-      fontFamily: 'Arial',
-      color: '#00ff00'
-    }).setOrigin(0.5);
+    // Helper to add player controls
+    const addControls = (x, title, color, controls) => {
+      this.add.text(x, cy + 40, title, {fontSize: '18px', fontFamily: 'Arial', color}).setOrigin(0.5);
+      controls.forEach((c, i) => {
+        this.add.text(x, cy + 70 + i * 20, c, {fontSize: '14px', fontFamily: 'Arial', color: '#aaa'}).setOrigin(0.5);
+      });
+    };
 
-    this.add.text(200, controlsY + 70, 'Move: W A S D', {
-      fontSize: '14px',
-      fontFamily: 'Arial',
-      color: '#aaa'
-    }).setOrigin(0.5);
-
-    this.add.text(200, controlsY + 90, 'Shoot: Q or R', {
-      fontSize: '14px',
-      fontFamily: 'Arial',
-      color: '#aaa'
-    }).setOrigin(0.5);
-
-    this.add.text(200, controlsY + 110, 'Special: E', {
-      fontSize: '14px',
-      fontFamily: 'Arial',
-      color: '#aaa'
-    }).setOrigin(0.5);
-
-    // Player 2 controls
-    this.add.text(600, controlsY + 40, 'PLAYER 2', {
-      fontSize: '18px',
-      fontFamily: 'Arial',
-      color: '#0099ff'
-    }).setOrigin(0.5);
-
-    this.add.text(600, controlsY + 70, 'Move: Arrow Keys', {
-      fontSize: '14px',
-      fontFamily: 'Arial',
-      color: '#aaa'
-    }).setOrigin(0.5);
-
-    this.add.text(600, controlsY + 90, 'Shoot: U or P', {
-      fontSize: '14px',
-      fontFamily: 'Arial',
-      color: '#aaa'
-    }).setOrigin(0.5);
-
-    this.add.text(600, controlsY + 110, 'Special: O', {
-      fontSize: '14px',
-      fontFamily: 'Arial',
-      color: '#aaa'
-    }).setOrigin(0.5);
+    addControls(200, 'PLAYER 1', '#00ff00', ['Move: WASD', 'Shoot: Q/R', 'Special: E']);
+    addControls(600, 'PLAYER 2', '#0099ff', ['Move: Arrows', 'Shoot: U/P', 'Special: O']);
 
     // Instructions for menu navigation
     this.add.text(400, 560, 'Press W/S or Arrow Keys to select, Enter to start', {
@@ -211,10 +177,21 @@ class MenuScene extends Phaser.Scene {
   }
 
   update(time) {
-    // Draw background
+    // Draw animated background
     this.graphics.clear();
     this.graphics.fillStyle(0x000000, 1);
     this.graphics.fillRect(0, 0, 800, 600);
+
+    // Grid pattern
+    this.graphics.lineStyle(1, 0x1a1a1a, 1);
+    for (let i = 0; i < 800; i += 40) {
+      const wave = Math.sin(time * 0.001 + i * 0.02) * 5;
+      this.graphics.lineBetween(i, 0, i, 600 + wave);
+    }
+    for (let j = 0; j < 600; j += 40) {
+      const wave = Math.cos(time * 0.001 + j * 0.02) * 5;
+      this.graphics.lineBetween(0, j, 800 + wave, j);
+    }
 
     // Selection
     if (time - this.lastInput > 100) {
@@ -229,6 +206,10 @@ class MenuScene extends Phaser.Scene {
         this.lastInput = time;
       }
     }
+
+    // Title pulse effect
+    const pulse = 1 + Math.sin(time * 0.003) * 0.05;
+    this.titleText.setScale(pulse);
 
     // Visual update
     if (this.selectedOption === 0) {
@@ -799,24 +780,57 @@ class GameScene extends Phaser.Scene {
     // Clear and redraw
     this.graphics.clear();
 
+    // Background grid
+    this.graphics.lineStyle(1, 0x0a0a0a, 0.5);
+    for (let i = 20; i < 780; i += 30) this.graphics.lineBetween(i, 20, i, 580);
+    for (let j = 20; j < 580; j += 30) this.graphics.lineBetween(20, j, 780, j);
+
+    // Brick texture helper with relief border
+    const drawBricks = (x, y, w, h, color) => {
+      this.graphics.fillStyle(color);
+      this.graphics.fillRect(x, y, w, h);
+
+      // Relief effect: light top-left, dark bottom-right
+      this.graphics.lineStyle(6, 0x444444);
+      this.graphics.lineBetween(x, y, x + w, y);
+      this.graphics.lineBetween(x, y, x, y + h);
+      this.graphics.lineStyle(6, 0x0a0a0a);
+      this.graphics.lineBetween(x + w, y, x + w, y + h);
+      this.graphics.lineBetween(x, y + h, x + w, y + h);
+
+      // Brick pattern
+      this.graphics.lineStyle(1, 0x1a1a1a);
+      const bw = 14, bh = 7;
+      for (let by = -bh; by < h + bh; by += bh) {
+        const offset = (Math.floor(by / bh) % 2) * (bw / 2);
+        for (let bx = -bw; bx < w + bw; bx += bw) {
+          const rx = x + bx + offset, ry = y + by;
+          const rw = Math.min(bw, x + w - rx), rh = Math.min(bh, y + h - ry);
+          if (rx < x + w && ry < y + h && rx + rw > x && ry + rh > y) {
+            this.graphics.strokeRect(Math.max(rx, x), Math.max(ry, y),
+              Math.min(rx + bw, x + w) - Math.max(rx, x),
+              Math.min(ry + bh, y + h) - Math.max(ry, y));
+          }
+        }
+      }
+    };
+
     // Draw walls
-    this.graphics.fillStyle(0x444444);
-    this.graphics.fillRect(0, 0, 800, 20);
-    this.graphics.fillRect(0, 580, 800, 20);
-    this.graphics.fillRect(0, 0, 20, 600);
-    this.graphics.fillRect(780, 0, 20, 600);
+    drawBricks(0, 0, 800, 20, 0x2a2a2a);
+    drawBricks(0, 580, 800, 20, 0x2a2a2a);
+    drawBricks(0, 0, 20, 600, 0x2a2a2a);
+    drawBricks(780, 0, 20, 600, 0x2a2a2a);
 
     // Draw doors
     this.graphics.fillStyle(this.doorsOpen ? 0x00ffff : 0x00ff00);
-    this.graphics.fillRect(380, 0, 40, 20);    // Top
-    this.graphics.fillRect(380, 580, 40, 20);  // Bottom
-    this.graphics.fillRect(0, 280, 20, 40);    // Left
-    this.graphics.fillRect(780, 280, 20, 40);  // Right
+    this.graphics.fillRect(380, 0, 40, 20);
+    this.graphics.fillRect(380, 580, 40, 20);
+    this.graphics.fillRect(0, 280, 20, 40);
+    this.graphics.fillRect(780, 280, 20, 40);
 
     // Draw obstacles
-    this.graphics.fillStyle(0x666666);
     this.obstacleData.forEach(obs => {
-      this.graphics.fillRect(obs.x - obs.w/2, obs.y - obs.h/2, obs.w, obs.h);
+      drawBricks(obs.x - obs.w/2, obs.y - obs.h/2, obs.w, obs.h, 0x3a3a3a);
     });
 
     // Draw players
@@ -839,11 +853,19 @@ class GameScene extends Phaser.Scene {
     });
 
     this.playerSpecialBullets.children.entries.forEach(b => {
+      // Trail effect
+      if (b.body) {
+        const angle = Math.atan2(b.body.velocity.y, b.body.velocity.x);
+        for (let i = 1; i <= 3; i++) {
+          const alpha = 0.3 - i * 0.1;
+          this.graphics.fillStyle(b.color, alpha);
+          this.graphics.fillCircle(b.x - Math.cos(angle) * i * 6, b.y - Math.sin(angle) * i * 6, 6 - i);
+        }
+      }
       this.graphics.fillStyle(b.color);
       this.graphics.fillCircle(b.x, b.y, 8);
       this.graphics.lineStyle(2, b.color, 0.5);
       this.graphics.strokeCircle(b.x, b.y, 12);
-      // Guardar velocidad previa para rebotes
       if (b.body && (b.body.velocity.x !== 0 || b.body.velocity.y !== 0)) {
         b.prevVelocity = { x: b.body.velocity.x, y: b.body.velocity.y };
       }
