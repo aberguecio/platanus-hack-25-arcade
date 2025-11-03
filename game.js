@@ -26,6 +26,275 @@ const COOP_DIFFICULTY = 1.5;       // Multiplier for 2-player mode (affects enem
 // Press 3: Skip to Wave 20 (Rotating Laser Boss)
 // Press 9: Kill all enemies instantly
 
+// STORY SCENE
+class StoryScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'StoryScene' });
+  }
+
+  create() {
+    this.graphics = this.add.graphics();
+    this.currentPanel = 0;
+    this.canAdvance = false;
+
+    // Panels data
+    this.panels = [
+      {
+        text: "In the world of polygons, status was\nmeasured by the number of sides.",
+        drawFunc: (g) => this.drawPanel1(g)
+      },
+      {
+        text: "You, a circle, were nothing,\na servant among shapes.",
+        drawFunc: (g) => this.drawPanel2(g)
+      },
+      {
+        text: "Until you proved, with pure math,\nthat you have infinite sides.",
+        drawFunc: (g) => this.drawPanel3(g)
+      },
+      {
+        text: "The world trembled...\nso they tried to silence you.",
+        drawFunc: (g) => this.drawPanel4(g)
+      }
+    ];
+
+    this.showPanel(0);
+
+    // Skip hint
+    this.skipText = this.add.text(400, 580, 'Press any key to skip...', {
+      fontSize: '14px',
+      fontFamily: 'Arial',
+      color: '#666'
+    }).setOrigin(0.5).setAlpha(0.5);
+
+    // Input to advance/skip
+    this.input.keyboard.on('keydown', () => {
+      if (!this.canAdvance) return;
+
+      this.currentPanel++;
+      if (this.currentPanel >= this.panels.length) {
+        this.scene.start('MenuScene');
+      } else {
+        this.showPanel(this.currentPanel);
+      }
+    });
+
+    // Allow advancing after short delay
+    this.time.delayedCall(500, () => {
+      this.canAdvance = true;
+    });
+  }
+
+  showPanel(index) {
+    const panel = this.panels[index];
+
+    // Clear previous
+    if (this.panelText) this.panelText.destroy();
+
+    // Show text
+    this.panelText = this.add.text(400, 500, panel.text, {
+      fontSize: '20px',
+      fontFamily: 'Arial',
+      color: '#ffffff',
+      align: 'center',
+      stroke: '#000',
+      strokeThickness: 4
+    }).setOrigin(0.5);
+
+    this.canAdvance = false;
+    this.time.delayedCall(300, () => {
+      this.canAdvance = true;
+    });
+  }
+
+  update() {
+    this.graphics.clear();
+    this.graphics.fillStyle(0x000000);
+    this.graphics.fillRect(0, 0, 800, 600);
+
+    const panel = this.panels[this.currentPanel];
+    if (panel && panel.drawFunc) {
+      panel.drawFunc(this.graphics);
+    }
+  }
+
+  drawPanel1(g) {
+    // Show hierarchy: Triangle < Square < Pentagon < Hexagon
+    const y = 200;
+    const colors = [0xff0000, 0xff8800, 0xffff00, 0x00ff00];
+    const sizes = [20, 25, 30, 35];
+    const positions = [150, 300, 450, 600];
+
+    // Triangle
+    g.fillStyle(colors[0]);
+    g.fillTriangle(positions[0], y - sizes[0], positions[0] - sizes[0], y + sizes[0], positions[0] + sizes[0], y + sizes[0]);
+
+    // Square
+    g.fillStyle(colors[1]);
+    g.fillRect(positions[1] - sizes[1], y - sizes[1], sizes[1] * 2, sizes[1] * 2);
+
+    // Pentagon
+    g.fillStyle(colors[2]);
+    for (let i = 0; i < 5; i++) {
+      const a = (i * Math.PI * 2 / 5) - Math.PI / 2;
+      const px = positions[2] + Math.cos(a) * sizes[2];
+      const py = y + Math.sin(a) * sizes[2];
+      if (i === 0) g.beginPath().moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.closePath().fillPath();
+
+    // Hexagon
+    g.fillStyle(colors[3]);
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      const px = positions[3] + Math.cos(a) * sizes[3];
+      const py = y + Math.sin(a) * sizes[3];
+      if (i === 0) g.beginPath().moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.closePath().fillPath();
+
+    // Arrows
+    g.lineStyle(2, 0x666666);
+    for (let i = 0; i < 3; i++) {
+      g.lineBetween(positions[i] + 40, y, positions[i + 1] - 40, y);
+      g.fillTriangle(positions[i + 1] - 45, y - 5, positions[i + 1] - 45, y + 5, positions[i + 1] - 40, y);
+    }
+  }
+
+  drawPanel2(g) {
+    // Circle (you) in servant position, looking up at shapes
+    g.fillStyle(0x888888);
+    g.fillCircle(200, 350, 25);
+
+    // Superior shapes on pedestals
+    g.fillStyle(0xffff00);
+    g.fillRect(500 - 20, 150 - 20, 40, 40); // Square
+
+    g.fillStyle(0x00ff88);
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      const px = 600 + Math.cos(a) * 25;
+      const py = 150 + Math.sin(a) * 25;
+      if (i === 0) g.beginPath().moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.closePath().fillPath();
+
+    // Pedestals
+    g.fillStyle(0x333333);
+    g.fillRect(480, 180, 40, 100);
+    g.fillRect(580, 180, 40, 100);
+  }
+
+  drawPanel3(g) {
+    // Blackboard with proof
+    g.fillStyle(0x1a3a1a);
+    g.fillRect(100, 50, 600, 350);
+    g.lineStyle(3, 0x8b6914);
+    g.strokeRect(100, 50, 600, 350);
+
+    // Write proof (simplified for space)
+    g.fillStyle(0xffffff);
+    const proofLines = [
+      "C(R) = {(x,y) ∈ R²: x² + y² = R²}",
+      "",
+      "∃{Pₙ}ₙ∈ℕ ⊂ P(R²), Pₙ regular inscribed",
+      "",
+      "Lₙ = 2R sin(π/n)",
+      "Pₙ = n·Lₙ",
+      "",
+      "lim(n→∞) Lₙ = 0,  lim(n→∞) Pₙ = 2πR",
+      "",
+      "⇒ lim(n→∞) Pₙ = C(R) ⇒ #sides(C) = ∞",
+      "",
+      "∴ C(R) = polygon with n = ∞"
+    ];
+
+    this.drawText(proofLines, 120, 70, 16);
+
+    // Circle with inscribed polygon below
+    const cx = 400, cy = 450, r = 40;
+    g.lineStyle(2, 0x00ff00);
+    g.strokeCircle(cx, cy, r);
+
+    // Inscribed octagon
+    g.lineStyle(1, 0xffff00);
+    for (let i = 0; i < 8; i++) {
+      const a1 = i * Math.PI / 4;
+      const a2 = (i + 1) * Math.PI / 4;
+      g.lineBetween(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r, cx + Math.cos(a2) * r, cy + Math.sin(a2) * r);
+    }
+  }
+
+  drawPanel4(g) {
+    // Circle (you) in center, surrounded by angry shapes
+    g.fillStyle(0x00ff00);
+    g.fillCircle(400, 300, 30);
+
+    // Angry shapes around
+    const shapes = [
+      { x: 200, y: 150, type: 'triangle' },
+      { x: 600, y: 150, type: 'square' },
+      { x: 150, y: 400, type: 'pentagon' },
+      { x: 650, y: 400, type: 'hexagon' }
+    ];
+
+    shapes.forEach(s => {
+      g.fillStyle(0xff0000);
+      if (s.type === 'triangle') {
+        g.fillTriangle(s.x, s.y - 25, s.x - 25, s.y + 25, s.x + 25, s.y + 25);
+      } else if (s.type === 'square') {
+        g.fillRect(s.x - 25, s.y - 25, 50, 50);
+      } else if (s.type === 'pentagon') {
+        g.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const a = (i * Math.PI * 2 / 5) - Math.PI / 2;
+          const px = s.x + Math.cos(a) * 25;
+          const py = s.y + Math.sin(a) * 25;
+          if (i === 0) g.moveTo(px, py);
+          else g.lineTo(px, py);
+        }
+        g.closePath().fillPath();
+      } else if (s.type === 'hexagon') {
+        g.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = i * Math.PI / 3;
+          const px = s.x + Math.cos(a) * 25;
+          const py = s.y + Math.sin(a) * 25;
+          if (i === 0) g.moveTo(px, py);
+          else g.lineTo(px, py);
+        }
+        g.closePath().fillPath();
+      }
+    });
+
+    // Red X marks over circle
+    g.lineStyle(5, 0xff0000);
+    g.lineBetween(370, 270, 430, 330);
+    g.lineBetween(430, 270, 370, 330);
+  }
+
+  drawText(lines, x, y, size) {
+    // Note: Phaser Graphics doesn't support text rendering directly
+    // We'll need to use Text objects instead
+    if (!this.proofTexts) this.proofTexts = [];
+
+    // Clear old texts
+    this.proofTexts.forEach(t => t.destroy());
+    this.proofTexts = [];
+
+    lines.forEach((line, i) => {
+      const text = this.add.text(x, y + i * (size + 4), line, {
+        fontSize: size + 'px',
+        fontFamily: 'Courier New',
+        color: '#ffffff'
+      });
+      this.proofTexts.push(text);
+    });
+  }
+}
+
 // MENU SCENE
 class MenuScene extends Phaser.Scene {
   constructor() {
@@ -3092,7 +3361,7 @@ const config = {
       debug: false
     }
   },
-  scene: [MenuScene, GameScene]
+  scene: [StoryScene, MenuScene, GameScene]
 };
 
 const game = new Phaser.Game(config);
