@@ -146,19 +146,12 @@ class MenuScene extends Phaser.Scene {
     const cy = 400;
     this.add.text(400, cy, 'CONTROLS', {fontSize: '24px', fontFamily: 'Arial', color: '#ffff00'}).setOrigin(0.5);
 
-    // Helper to add player controls
-    const addControls = (x, title, color, controls) => {
-      this.add.text(x, cy + 40, title, {fontSize: '18px', fontFamily: 'Arial', color}).setOrigin(0.5);
-      controls.forEach((c, i) => {
-        this.add.text(x, cy + 70 + i * 20, c, {fontSize: '14px', fontFamily: 'Arial', color: '#aaa'}).setOrigin(0.5);
-      });
-    };
-
-    addControls(200, 'PLAYER 1', '#00ff00', ['Move: WASD', 'Shoot: Q/R', 'Special: E']);
-    addControls(600, 'PLAYER 2', '#0099ff', ['Move: Arrows', 'Shoot: U/P', 'Special: O']);
+    // Render player controls
+    renderPlayerControls(this, 200, cy + 40, CONTROLS_CONFIG.player1);
+    renderPlayerControls(this, 600, cy + 40, CONTROLS_CONFIG.player2);
 
     // Instructions for menu navigation
-    this.add.text(400, 560, 'Press W/S or Arrow Keys to select, Enter to start', {
+    this.add.text(400, 560, 'Press W/S to select, Enter to start', {
       fontSize: '16px',
       fontFamily: 'Arial',
       color: '#888'
@@ -197,10 +190,10 @@ class MenuScene extends Phaser.Scene {
 
     // Selection
     if (time - this.lastInput > 100) {
-      if (this.keys.w.isDown || this.cursors.up.isDown) {
+      if (this.keys.w.isDown) {
         this.selectedOption = 0;
         this.lastInput = time;
-      } else if (this.keys.s.isDown || this.cursors.down.isDown) {
+      } else if (this.keys.s.isDown) {
         this.selectedOption = 1;
         this.lastInput = time;
       } else if (this.keys.enter.isDown) {
@@ -358,7 +351,7 @@ const BOSS_TYPES = {
     color: 0xffff00,
     points: 500,
     size: 60,
-    name: 'General Pattern'
+    name: 'Shooting Star'
   },
   twins: {
     health: 1200,
@@ -376,7 +369,7 @@ const BOSS_TYPES = {
     color: 0x00ffaa,
     points: 2000,
     size: 80,
-    name: 'ROTATING LASER'
+    name: 'Ultimate Laser'
   }
 };
 
@@ -458,6 +451,63 @@ const POWERUP_TYPES = {
     description: 'Max Hearts +1'
   }
 };
+
+// CONTROL CONFIGURATION
+const CONTROLS_CONFIG = {
+  player1: {
+    title: 'PLAYER 1',
+    color: '#00ff00',
+    controls: ['Move: WASD', 'Shoot: Q/R', 'Special: E']
+  },
+  player2: {
+    title: 'PLAYER 2',
+    color: '#0099ff',
+    controls: ['Move: I/K/J/L', 'Shoot: U/P', 'Special: O']
+  }
+};
+
+// Helper function to render player controls
+function renderPlayerControls(scene, x, startY, playerConfig, options = {}) {
+  const {
+    titleSize = '18px',
+    controlSize = '14px',
+    spacing = 20,
+    useStroke = false,
+    textArray = null
+  } = options;
+
+  const texts = textArray || [];
+  let y = startY;
+
+  // Title style
+  const titleStyle = {
+    fontSize: titleSize,
+    fontFamily: 'Arial',
+    color: playerConfig.color
+  };
+  if (useStroke) {
+    titleStyle.stroke = '#000';
+    titleStyle.strokeThickness = 3;
+  }
+
+  const title = scene.add.text(x, y, playerConfig.title, titleStyle).setOrigin(0.5);
+  if (textArray) texts.push(title);
+  y += 30;
+
+  // Controls
+  playerConfig.controls.forEach(control => {
+    const controlText = scene.add.text(x, y, control, {
+      fontSize: controlSize,
+      fontFamily: 'Arial',
+      color: '#aaa'
+    }).setOrigin(0.5);
+
+    if (textArray) texts.push(controlText);
+    y += spacing;
+  });
+
+  return texts;
+}
 
 // MAP LAYOUTS
 const MAP_LAYOUTS = [
@@ -693,7 +743,7 @@ class GameScene extends Phaser.Scene {
     // Player overlaps (bullets, doors, powerups)
     this.players.forEach(p => {
       this.physics.add.overlap(this.enemyBullets, p, (player, b) => this.hitPlayer(player, b));
-      this.physics.add.overlap(p, this.doorZones, (player, d) => this.handleDoorOverlap(player, d));
+      this.physics.add.overlap(p, this.doorZones, () => this.handleDoorOverlap());
       this.physics.add.overlap(p, this.powerups, (player, pow) => this.collectPowerup(player, pow));
     });
 
@@ -704,6 +754,15 @@ class GameScene extends Phaser.Scene {
       up: 'I', down: 'K', left: 'J', right: 'L',
       shoot2: 'U', special2: 'O', p: 'P',
       restart: 'R'
+    });
+
+    // Pause system
+    this.isPaused = false;
+    this.pauseGraphics = this.add.graphics();
+    this.pauseTexts = [];
+
+    this.input.keyboard.on('keydown-ENTER', () => {
+      this.togglePause();
     });
 
     // Debug controls (only included if DEBUG_MODE is true)
@@ -797,6 +856,15 @@ class GameScene extends Phaser.Scene {
 
     // Clear and redraw
     this.graphics.clear();
+
+    // Handle pause menu
+    if (this.isPaused) {
+      this.drawPauseMenu();
+      return;
+    }
+
+    // Clear pause graphics when not paused
+    this.pauseGraphics.clear();
 
     // Background grid
     this.graphics.lineStyle(1, 0x1a1a1a, 0.5);
@@ -1007,7 +1075,7 @@ class GameScene extends Phaser.Scene {
           this.updateBoss(e, time, delta);
         }
       } else {
-        this.updateEnemy(e, time, delta);
+        this.updateEnemy(e, time);
       }
     });
 
@@ -1331,59 +1399,6 @@ class GameScene extends Phaser.Scene {
     return { speedMultiplier, shootDelayMultiplier };
   }
 
-  // Helper: Apply elemental status effects (electrocute, freeze, burn)
-  applyStatusEffect(entity, time) {
-    if (entity.isElectrocuted) {
-      const elapsed = time - entity.electrocutedTime;
-      if (elapsed < entity.electrocutedDuration) {
-        entity.setVelocity(0);
-        return true;
-      } else {
-        entity.isElectrocuted = false;
-      }
-    }
-
-    if (entity.isFrozen) {
-      const elapsed = time - entity.frozenTime;
-      if (elapsed >= entity.frozenDuration) {
-        entity.isFrozen = false;
-      }
-      return false;
-    }
-
-    if (entity.isBurning) {
-      const elapsed = time - entity.burningTime;
-      if (elapsed >= entity.burningDuration) {
-        entity.isBurning = false;
-      } else {
-        if (!entity.lastBurnDamage) entity.lastBurnDamage = time;
-        if (time - entity.lastBurnDamage >= 500) {
-          entity.health -= 5;
-          entity.lastBurnDamage = time;
-          if (entity.health <= 0) {
-            const pos = { x: entity.x, y: entity.y };
-            if (entity.isBoss) {
-              // Note: This is from burning in applyStatusEffect, not a normal boss death
-              // We still need to call handleBossDeath but the boss is already destroyed here
-              // So we create a fake boss object with necessary data
-              this.handleBossDeath({ bossType: entity.bossType, sibling: entity.sibling }, pos);
-            } else {
-              this.lastEnemyPosition = pos;
-              const typeData = ENEMY_TYPES[entity.type];
-              this.score += typeData.points;
-              this.scoreText.setText('Score: ' + this.score);
-              this.stats.enemiesKilled++;
-              this.createExplosionEffect(pos.x, pos.y, 0xff8800, 10);
-            }
-            entity.destroy();
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
-
   // Helper: Draw polygon (supports regular polygons and stars)
   drawPolygon(x, y, sides, outerRadius, innerRadius = null, rotation = 0) {
     this.graphics.beginPath();
@@ -1590,7 +1605,7 @@ class GameScene extends Phaser.Scene {
     enemy.angle = 0;
   }
 
-  updateEnemy(enemy, time, delta) {
+  updateEnemy(enemy, time) {
     // Process elemental effects
     const effects = this.processElementalEffects(enemy, time, (e) => {
       const deathPosition = { x: e.x, y: e.y };
@@ -1902,8 +1917,8 @@ class GameScene extends Phaser.Scene {
         // Efecto visual de muerte de enemigo normal
         this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff8800, 10);
 
-        // 1% chance to drop a heart
-        if (Math.random() < 0.01) {
+        // 3% chance to drop a heart
+        if (Math.random() < 0.03) {
           this.spawnPowerup({ x: deathPosition.x, y: deathPosition.y }, 'heart');
         }
       }
@@ -2112,6 +2127,72 @@ class GameScene extends Phaser.Scene {
     return revivedAny;
   }
 
+  togglePause() {
+    if (this.gameOver) return;
+
+    this.isPaused = !this.isPaused;
+
+    if (this.isPaused) {
+      this.physics.pause();
+    } else {
+      this.physics.resume();
+      // Clear pause texts and graphics
+      this.pauseTexts.forEach(t => t.destroy());
+      this.pauseTexts = [];
+      this.pauseGraphics.clear();
+    }
+  }
+
+  drawPauseMenu() {
+    // Semi-transparent overlay
+    this.pauseGraphics.clear();
+    this.pauseGraphics.fillStyle(0x000000, 0.7);
+    this.pauseGraphics.fillRect(0, 0, 800, 600);
+
+    // Create texts if not exist
+    if (this.pauseTexts.length === 0) {
+      // Title
+      this.pauseTexts.push(this.add.text(400, 100, 'PAUSED', {
+        fontSize: '48px',
+        fontFamily: 'Arial',
+        color: '#ffff00',
+        stroke: '#000',
+        strokeThickness: 6
+      }).setOrigin(0.5));
+
+      // Controls title
+      this.pauseTexts.push(this.add.text(400, 180, 'CONTROLS', {
+        fontSize: '28px',
+        fontFamily: 'Arial',
+        color: '#00ff00'
+      }).setOrigin(0.5));
+
+      // Render player controls with stroke
+      renderPlayerControls(this, 200, 240, CONTROLS_CONFIG.player1, {
+        titleSize: '20px',
+        controlSize: '16px',
+        spacing: 25,
+        useStroke: true,
+        textArray: this.pauseTexts
+      });
+
+      renderPlayerControls(this, 600, 240, CONTROLS_CONFIG.player2, {
+        titleSize: '20px',
+        controlSize: '16px',
+        spacing: 25,
+        useStroke: true,
+        textArray: this.pauseTexts
+      });
+
+      // Resume instruction
+      this.pauseTexts.push(this.add.text(400, 520, 'Press ENTER to resume', {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        color: '#ffff00'
+      }).setOrigin(0.5));
+    }
+  }
+
   endGame() {
     this.gameOver = true;
 
@@ -2227,13 +2308,13 @@ class GameScene extends Phaser.Scene {
     }
 
     // Return to menu
-    this.add.text(400, 560, 'Press R to return to menu', {
+    this.add.text(400, 560, 'Press ENTER to return to menu', {
       fontSize: '20px',
       fontFamily: 'Arial',
       color: '#888'
     }).setOrigin(0.5);
 
-    this.input.keyboard.once('keydown-R', () => {
+    this.input.keyboard.once('keydown-ENTER', () => {
       this.scene.start('MenuScene');
     });
 
@@ -2385,50 +2466,6 @@ class GameScene extends Phaser.Scene {
       bossName = typeData.name;
     }
 
-    const boss = this.enemies.create(400, 300, null);
-    boss.setSize(typeData.size, typeData.size);
-    boss.setVisible(false);
-    boss.isBoss = true;
-    boss.bossType = bossType;
-    boss.health = Math.ceil(typeData.health * this.getSpawnDifficulty());
-    boss.maxHealth = Math.ceil(typeData.health * this.getSpawnDifficulty());
-    boss.speed = typeData.speed;
-    boss.shootDelay = typeData.shootDelay / this.getSpawnDifficulty();
-    boss.lastShot = 0;
-    boss.spawnTime = this.time.now;
-    boss.angle = 0;
-    boss.patternIndex = 0;
-    boss.hasChildren = false;
-
-    // Random boss properties
-    if (bossType === 'random') {
-      boss.starPoints = 7 + Math.floor((this.wave - 30) / 10);
-      boss.points = typeData.points; // Store points for scoring
-      boss.attackPatterns = [];
-      const patternCount = 2 + Math.floor(Math.random() * 2); // 2-3 patterns
-      for (let i = 0; i < patternCount; i++) {
-        const r = Math.random();
-        if (r < 0.33) boss.attackPatterns.push('wave');
-        else if (r < 0.66) boss.attackPatterns.push('spiral');
-        else boss.attackPatterns.push('laser');
-      }
-      boss.currentPattern = 0;
-      boss.patternTimer = 0;
-    }
-
-    // Pattern boss vars
-    boss.attackPhase = 0;
-    boss.phaseStartTime = 0;
-    boss.spiralFired = false;
-    boss.wave1Fired = false;
-    boss.wave2Fired = false;
-
-    this.currentBoss = boss;
-
-    // Boss spawn effects
-    this.cameras.main.shake(800, 0.01);
-    this.cameras.main.flash(800, 255, 0, 0);
-    this.createExplosionEffect(400, 300, 0xff0000, 20);
 
     // Show boss intro message
     const msg = this.add.text(400, 250, 'WARNING!\n' + bossName, {
@@ -2440,8 +2477,55 @@ class GameScene extends Phaser.Scene {
       strokeThickness: 6
     }).setOrigin(0.5);
 
-    this.time.delayedCall(2000, () => msg.destroy());
     this.playSound(200, 0.5);
+
+    // Delay boss creation until message disappears
+    this.time.delayedCall(2000, () => {
+      msg.destroy();
+      this.cameras.main.shake(800, 0.01);
+      this.cameras.main.flash(800, 255, 0, 0);
+      this.createExplosionEffect(400, 300, 0xff0000, 20);
+
+      const boss = this.enemies.create(400, 300, null);
+      boss.setSize(typeData.size, typeData.size);
+      boss.setVisible(false);
+      boss.isBoss = true;
+      boss.bossType = bossType;
+      boss.health = Math.ceil(typeData.health * this.getSpawnDifficulty());
+      boss.maxHealth = Math.ceil(typeData.health * this.getSpawnDifficulty());
+      boss.speed = typeData.speed;
+      boss.shootDelay = typeData.shootDelay / this.getSpawnDifficulty();
+      boss.lastShot = 0;
+      boss.spawnTime = this.time.now;
+      boss.angle = 0;
+      boss.patternIndex = 0;
+      boss.hasChildren = false;
+
+      // Random boss properties
+      if (bossType === 'random') {
+        boss.starPoints = 7 + Math.floor((this.wave - 30) / 10);
+        boss.points = typeData.points; // Store points for scoring
+        boss.attackPatterns = [];
+        const patternCount = 2 + Math.floor(Math.random() * 2); // 2-3 patterns
+        for (let i = 0; i < patternCount; i++) {
+          const r = Math.random();
+          if (r < 0.33) boss.attackPatterns.push('wave');
+          else if (r < 0.66) boss.attackPatterns.push('spiral');
+          else boss.attackPatterns.push('laser');
+        }
+        boss.currentPattern = 0;
+        boss.patternTimer = 0;
+      }
+
+      // Pattern boss vars
+      boss.attackPhase = 0;
+      boss.phaseStartTime = 0;
+      boss.spiralFired = false;
+      boss.wave1Fired = false;
+      boss.wave2Fired = false;
+
+      this.currentBoss = boss;
+    });
   }
 
   updateBoss(boss, time, delta) {
@@ -2964,7 +3048,7 @@ class GameScene extends Phaser.Scene {
     this.graphics.fillStyle(d.color, p);
     this.graphics.save();
     this.graphics.translateCanvas(x, y);
-    this.graphics.fillStyle(0xffffff, p);
+    // this.graphics.fillStyle(0xffffff, p);
 
     // Simple icon overlays
     if (powerup.type === 'extraBullet') {
@@ -3087,9 +3171,8 @@ class GameScene extends Phaser.Scene {
     this.doorWallArray.forEach(door => door.body.enable = true);
   }
 
-  handleDoorOverlap(player, door) {
+  handleDoorOverlap() {
     if (!this.doorsOpen || this.transitioning) return;
-
     this.nextLevel();
   }
 
