@@ -1,30 +1,12 @@
-// Battle Arena - Cooperative Wave Survival
-// Fight endless waves of enemies alone or with a friend!
 
 // ===== DEBUG & SETTINGS =====
 const DEBUG_MODE = false;           // Set to true for testing
 const DEBUG_START_WAVE = 1;        // Which wave to start at (useful for testing bosses: 5, 10, 20)
 const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
-
 const DIFFICULTY = 1;            // Difficulty multiplier
-// Examples:
-// 0.1 = Very Easy (10% enemy health, 10% enemy count, faster shooting)
-// 0.5 = Easy (50% enemy health, 50% enemy count)
-// 1.0 = Normal (default)
-// 2.0 = Hard (200% enemy health, 200% enemy count, slower shooting)
 
 const COOP_DIFFICULTY = 1.5;       // Multiplier for 2-player mode (affects enemy count & spawn rate, NOT health)
-// Applied on top of DIFFICULTY when playing with 2 players
-// 1.0 = No extra difficulty
-// 1.5 = 50% more enemies and faster spawns (default)
-// 2.0 = Double enemies and spawn rate
-//
-// DEBUG CONTROLS (when DEBUG_MODE = true):
-// Press 1: Skip to Wave 5 (Bullet Pattern Boss)
-// Press 2: Skip to Wave 10 (Phase Shifter Boss)
-// Press 3: Skip to Wave 20 (Rotating Laser Boss)
-// Press 9: Kill all enemies instantly
 
 // =============================================================================
 // ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
@@ -176,7 +158,7 @@ class MenuScene extends Phaser.Scene {
     this.graphics.fillRect(0, 0, 800, 600);
 
     // Grid pattern with diagonal movement
-    this.graphics.lineStyle(1, 0x1a1a1a, 1);
+    this.graphics.lineStyle(1, 0x2a2a2a, 1);
     const offsetX = (time * 0.02) % 40; // Horizontal movement
     const offsetY = (time * 0.02) % 40; // Vertical movement
     for (let i = -40; i < 840; i += 40) {
@@ -826,7 +808,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5, 0);
 
     // Debug info
-    if (DEBUG_MODE || DEBUG_GODMODE || DIFFICULTY !== 1.0 || (this.numPlayers === 2 && COOP_DIFFICULTY !== 1.0)) {
+    if (DEBUG_MODE || DEBUG_GODMODE || DIFFICULTY !== 1.0 ) {
       let debugText = '';
       if (DEBUG_MODE) debugText += 'DEBUG MODE | ';
       if (DEBUG_GODMODE) debugText += 'GODMODE | ';
@@ -867,7 +849,7 @@ class GameScene extends Phaser.Scene {
     this.pauseGraphics.clear();
 
     // Background grid
-    this.graphics.lineStyle(1, 0x1a1a1a, 0.5);
+    this.graphics.lineStyle(1, 0x2a2a2a, 0.7);
     for (let i = 20; i < 780; i += 30) this.graphics.lineBetween(i, 20, i, 580);
     for (let j = 20; j < 580; j += 30) this.graphics.lineBetween(20, j, 780, j);
 
@@ -1092,7 +1074,12 @@ class GameScene extends Phaser.Scene {
     // Check wave complete
     if (this.enemiesThisWave >= this.enemiesPerWave && this.enemies.children.size === 0 && !this.bossActive && !this.doorsOpen && !this.waitingForNextWave) {
       this.waitingForNextWave = true; // Prevent multiple calls
-      this.trySpawnPowerup(false, this.lastEnemyPosition); // false = not boss
+      if (this.wave === 1) {
+        this.trySpawnPowerup(true, this.lastEnemyPosition); // this is not a boss but guaranteed powerup
+      }
+      else {
+        this.trySpawnPowerup(false, this.lastEnemyPosition); // false = not boss
+      }
       this.playSound(600, 0.25);
 
       // Pause de 2 segundos antes de la siguiente ronda
@@ -1574,9 +1561,9 @@ class GameScene extends Phaser.Scene {
       weights.square = Math.max(15, weights.square - weights.spinner / 4);
     }
 
-    // Introducir hexagon desde ronda 12
+    // Introducir hexagon desde ronda 13
     if (this.wave >= 13) {
-      weights.hexagon = Math.min(20, 5 + (this.wave - 12) * 2); // 5% en ronda 12, sube hasta 20%
+      weights.hexagon = Math.min(20, 5 + (this.wave - 13) * 2); // 5% en ronda 12, sube hasta 20%
       weights.triangle = Math.max(30, weights.triangle - weights.hexagon / 2);
     }
 
