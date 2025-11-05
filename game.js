@@ -6,7 +6,7 @@ const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 const DIFFICULTY = 1;            // Difficulty multiplier
 
-const COOP_DIFFICULTY = 1.3;       // Multiplier for 2-player mode (affects enemy count & spawn rate, NOT health)
+const COOP_DIFFICULTY = 1.3;       // Multiplier for 2-player mode (affects enemy count & spawn rate and boss health)
 
 const ARCADE_CONTROLS = {
   // ===== PLAYER 1 CONTROLS =====
@@ -1280,13 +1280,10 @@ class GameScene extends Phaser.Scene {
   }
 
   // Helper: Create enemy bullet with auto-destroy
-  createEnemyBullet(x, y, vx, vy, lifetime = 3000, checkWalls = true, playSound = false) {
+  createEnemyBullet(x, y, vx, vy, lifetime = 3000, playSound = false) {
     // Check if spawn point collides with walls or obstacles
-    if (checkWalls) {
-      const checkCollision = (group) => group.children.entries.some(w =>
-        Math.abs(x - w.x) < w.body.halfWidth + 5 && Math.abs(y - w.y) < w.body.halfHeight + 5
-      );
-      if (checkCollision(this.walls) || checkCollision(this.obstacles)) return null;
+    if (!this.isBulletPositionValid(x, y, 7)) {
+      return null;
     }
 
     const b = this.enemyBullets.create(x, y);
@@ -1332,8 +1329,8 @@ class GameScene extends Phaser.Scene {
     if (entity.isBurning) {
       const elapsed = time - entity.burnStartTime;
       if (elapsed < entity.burnDuration) {
-        if (time - entity.burnTickTime > 500) {
-          entity.health -= 3;
+        if (time - entity.burnTickTime > 450) {
+          entity.health -= 5;
           entity.burnTickTime = time;
           this.playSound(200, 0.03);
 
@@ -1406,24 +1403,23 @@ class GameScene extends Phaser.Scene {
       for (let i = 0; i < bulletCount; i++) {
         const offset = (i - (bulletCount - 1) / 2) * spread;
         const spreadAngle = angle + offset;
-        const b = group.create(
-          player.x + Math.cos(spreadAngle) * 25,
-          player.y + Math.sin(spreadAngle) * 25
-        );
-        b.setSize(16, 16);
-        b.setVisible(false);
-        b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
-        b.damage = damage;
-        b.pierce = player.pierce;
-        b.bounceCount = player.bounceCount;
-        b.bounces = 0;
-        b.homingStrength = player.homingStrength;
-        b.owner = player;
+        const posX = player.x + Math.cos(spreadAngle) * 25;
+        const posY = player.y + Math.sin(spreadAngle) * 25;
+        if (this.isBulletPositionValid(posX, posY, 7)){
+          const b = group.create(posX, posY);
+          b.setSize(16, 16);
+          b.setVisible(false);
+          b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
+          b.damage = damage;
+          b.pierce = player.pierce;
+          b.bounceCount = player.bounceCount;
+          b.bounces = 0;
+          b.homingStrength = player.homingStrength;
+          b.owner = player;
 
-        // Aplicar elemento y color
-        this.applyElementalProperties(b, elementalType, color);
-
-        this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
+          this.applyElementalProperties(b, elementalType, color);
+          this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
+        }
       }
 
       // BackShot
@@ -1463,22 +1459,23 @@ class GameScene extends Phaser.Scene {
       for (let i = 0; i < bulletCount; i++) {
         const offset = (i - (bulletCount - 1) / 2) * spread;
         const spreadAngle = angle + offset;
-        const b = group.create(
-          player.x + Math.cos(spreadAngle) * 25,
-          player.y + Math.sin(spreadAngle) * 25
-        );
-        b.setSize(8, 8);
-        b.setVisible(false);
-        b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
-        b.color = color;
-        b.damage = damage;
-        b.pierce = player.pierce;
-        b.bounceCount = player.bounceCount;
-        b.bounces = 0;
-        b.homingStrength = player.homingStrength;
-        b.owner = player;
+        const posX = player.x + Math.cos(spreadAngle) * 25;
+        const posY = player.y + Math.sin(spreadAngle) * 25;
+        if (this.isBulletPositionValid(posX, posY, 7)){
+          const b = group.create(posX, posY);
+          b.setSize(8, 8);
+          b.setVisible(false);
+          b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
+          b.color = color;
+          b.damage = damage;
+          b.pierce = player.pierce;
+          b.bounceCount = player.bounceCount;
+          b.bounces = 0;
+          b.homingStrength = player.homingStrength;
+          b.owner = player;
 
-        this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
+          this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
+        }
       }
       this.playSound(800, 0.08);
       // Small muzzle flash
@@ -1604,7 +1601,7 @@ class GameScene extends Phaser.Scene {
   shootCircle(src, count, offset = 0, spd = 200, rad = 20, lifetime = 3000) {
     for (let i = 0; i < count; i++) {
       const a = offset + i * Math.PI * 2 / count;
-      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime, false);
+      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime);
       this.playSound(500, 0.1)
     }
   }
@@ -1619,7 +1616,6 @@ class GameScene extends Phaser.Scene {
       Math.cos(a) * spd,
       Math.sin(a) * spd,
       lifetime,
-      !isBoss,
       isBoss
     );
   }
@@ -1645,7 +1641,7 @@ class GameScene extends Phaser.Scene {
       const a = Math.atan2(target.y - enemy.y, target.x - enemy.x);
       for (let i = 0; i < 3; i++) {
         const oa = a + (i - 1) * 0.15;
-        this.createEnemyBullet(enemy.x + Math.cos(oa) * 20, enemy.y + Math.sin(oa) * 20, Math.cos(oa) * s, Math.sin(oa) * s, 3000, true);
+        this.createEnemyBullet(enemy.x + Math.cos(oa) * 20, enemy.y + Math.sin(oa) * 20, Math.cos(oa) * s, Math.sin(oa) * s, 3000);
       }
       this.playSound(600, 0.1);
     }
@@ -2102,6 +2098,16 @@ class GameScene extends Phaser.Scene {
       this.pauseGraphics.clear();
     }
   }
+
+  // Helper: Check if a point is inside or too close to walls/obstacles
+  isBulletPositionValid(x, y, margin = 7) {
+    const checkCollision = (group) => group.children.entries.some(w =>
+      Math.abs(x - w.x) < w.body.halfWidth + margin &&
+      Math.abs(y - w.y) < w.body.halfHeight + margin
+    );
+    return !checkCollision(this.walls) && !checkCollision(this.obstacles);
+  }
+
 
   drawPauseMenu() {
     // Semi-transparent overlay
@@ -3080,7 +3086,7 @@ class GameScene extends Phaser.Scene {
 
         for (let arm = 0; arm < arms; arm++) {
           const armAngle = angle + (arm * Math.PI * 2 / arms);
-          this.createEnemyBullet(source.x, source.y, Math.cos(armAngle) * speed, Math.sin(armAngle) * speed, lifetime, false, true);
+          this.createEnemyBullet(source.x, source.y, Math.cos(armAngle) * speed, Math.sin(armAngle) * speed, lifetime, true);
         }
       });
     }
