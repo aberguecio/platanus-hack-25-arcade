@@ -1866,8 +1866,8 @@ class GameScene extends Phaser.Scene {
         // Efecto visual de muerte de enemigo normal
         this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff8800, 10);
 
-        // 10% chance to drop a heart
-        if (Math.random() < (0.1 * this.getSpawnDifficulty())) {
+        // up to 10% chance to drop a heart
+        if (Math.random() < (Math.min(0.1, (this.wave / 10) * this.getSpawnDifficulty()))) {
           this.spawnPowerup({ x: deathPosition.x, y: deathPosition.y }, 'heart');
         }
       }
@@ -2026,10 +2026,6 @@ class GameScene extends Phaser.Scene {
         y: deathPosition.y + offsetY
       }, 'heart');
     }
-
-    // Spawn a boss powerup
-    this.trySpawnPowerup(true, deathPosition);
-
 
     // Show message
     this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
@@ -2826,7 +2822,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Waves normales: SIN DAÑO primero
-  const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'moreDamage', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets'];
+    const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'moreDamage', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets'];
     const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot'];
     const chance = Math.random() / this.getSpawnDifficulty(); // Adjust chance by difficulty
 
