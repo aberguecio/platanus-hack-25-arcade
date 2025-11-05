@@ -7,18 +7,6 @@ const DEBUG_GODMODE = false;        // Set to true for invincibility
 const DIFFICULTY = 1;            // Difficulty multiplier
 
 const COOP_DIFFICULTY = 1.3;       // Multiplier for 2-player mode (affects enemy count & spawn rate, NOT health)
-// =============================================================================
-// ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
-// =============================================================================
-// Reference: See button-layout.webp at hack.platan.us/assets/images/arcade/
-//
-// Maps arcade button codes to keyboard keys for local testing.
-// Each arcade code can map to multiple keyboard keys (array values).
-// The arcade cabinet sends codes like 'P1U', 'P1A', etc. when buttons are pressed.
-//
-// To use in your game:
-//   if (key === 'P1U') { ... }  // Works on both arcade and local (via keyboard)
-// =============================================================================
 
 const ARCADE_CONTROLS = {
   // ===== PLAYER 1 CONTROLS =====
@@ -75,8 +63,6 @@ for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
     });
   }
 }
-
-
 
 // MENU SCENE
 class MenuScene extends Phaser.Scene {
@@ -2022,11 +2008,6 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    this.p1.health = this.p1.maxHealth;
-    if (this.numPlayers === 2) {
-      this.p2.health = this.p2.maxHealth;
-    }
-
     // Common boss death logic
     this.bossActive = false;
     this.openDoors();
@@ -2034,6 +2015,21 @@ class GameScene extends Phaser.Scene {
     if (!this.reviveDeadPlayers()) {
       this.trySpawnPowerup(true, deathPosition); // just give a power-up if no revival
     }
+
+    // Spawn 2-4 hearts slightly offset from boss death position
+    const numHearts = this.numPlayers + Math.floor(Math.random() * 3); // 2 a 4 corazones
+    for (let i = 0; i < numHearts; i++) {
+      const offsetX = (Math.random() - 0.5) * 80; // -40 a +40 pixels X
+      const offsetY = (Math.random() - 0.5) * 80; // -40 a +40 pixels Y
+      this.spawnPowerup({
+        x: deathPosition.x + offsetX,
+        y: deathPosition.y + offsetY
+      }, 'heart');
+    }
+
+    // Spawn a boss powerup
+    this.trySpawnPowerup(true, deathPosition);
+
 
     // Show message
     this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
@@ -2916,12 +2912,10 @@ class GameScene extends Phaser.Scene {
         break;
 
       case 'fireRate':
-        player.normalShotCooldown = Math.max(50, player.normalShotCooldown * 0.8); // -20% cooldown
-        player.specialShotCooldown = Math.max(300, player.specialShotCooldown * 0.8);
+        player.normalShotCooldown = Math.max(50, player.normalShotCooldown * 0.75); // -30% cooldown
+        player.specialCooldown = Math.max(300, player.specialCooldown * 0.75); // -30% cooldown for special
         message = `${powerupData.description}`;
         break;
-
-      
 
       case 'pierceShot':
         player.pierce++;
