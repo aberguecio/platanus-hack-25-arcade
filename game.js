@@ -6,8 +6,8 @@ const DEBUG_START_LEVEL = 1;       // Which level/map to start at (1, 2, 3)
 const DEBUG_GODMODE = false;        // Set to true for invincibility
 const DIFFICULTY = 1;            // Difficulty multiplier
 
-const COOP_DIFFICULTY = 1.5;       // Multiplier for 2-player mode (affects enemy count & spawn rate, NOT health)
-
+const COOP_DIFFICULTY = 1.3;       // Multiplier for 2-player mode (affects enemy count & spawn rate, NOT health)
+const ARCADE_MODE = false;        // Set to true when running on arcade cabinet hardware
 // =============================================================================
 // ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
 // =============================================================================
@@ -19,65 +19,62 @@ const COOP_DIFFICULTY = 1.5;       // Multiplier for 2-player mode (affects enem
 //
 // To use in your game:
 //   if (key === 'P1U') { ... }  // Works on both arcade and local (via keyboard)
-//
-// CURRENT GAME USAGE (Snake):
-//   - P1U/P1D/P1L/P1R (Joystick) → Snake Direction
-//   - P1A (Button A) or START1 (Start Button) → Restart Game
 // =============================================================================
+if (ARCADE_MODE) {
+  const ARCADE_CONTROLS = {
+    // ===== PLAYER 1 CONTROLS =====
+    // Joystick - Left hand on WASD
+    'P1U': ['w'],
+    'P1D': ['s'],
+    'P1L': ['a'],
+    'P1R': ['d'],
+    'P1DL': null,  // Diagonal down-left (no keyboard default)
+    'P1DR': null,  // Diagonal down-right (no keyboard default)
 
-const ARCADE_CONTROLS = {
-  // ===== PLAYER 1 CONTROLS =====
-  // Joystick - Left hand on WASD
-  'P1U': ['w'],
-  'P1D': ['s'],
-  'P1L': ['a'],
-  'P1R': ['d'],
-  'P1DL': null,  // Diagonal down-left (no keyboard default)
-  'P1DR': null,  // Diagonal down-right (no keyboard default)
+    // Action Buttons - Right hand on home row area (ergonomic!)
+    // Top row (ABC): U, I, O  |  Bottom row (XYZ): J, K, L
+    'P1A': ['q'],
+    'P1B': ['e'],
+    'P1C': null,
+    'P1X': ['q'],
+    'P1Y': ['e'],
+    'P1Z': null,
 
-  // Action Buttons - Right hand on home row area (ergonomic!)
-  // Top row (ABC): U, I, O  |  Bottom row (XYZ): J, K, L
-  'P1A': ['u'],
-  'P1B': ['i'],
-  'P1C': ['o'],
-  'P1X': ['j'],
-  'P1Y': ['k'],
-  'P1Z': ['l'],
+    // Start Button
+    'START1': ['Enter'],
 
-  // Start Button
-  'START1': ['1', 'Enter'],
+    // ===== PLAYER 2 CONTROLS =====
+    // Joystick - Right hand on Arrow Keys
+    'P2U': ['i'],
+    'P2D': ['k'],
+    'P2L': ['j'],
+    'P2R': ['l'],
+    'P2DL': null,  // Diagonal down-left (no keyboard default)
+    'P2DR': null,  // Diagonal down-right (no keyboard default)
 
-  // ===== PLAYER 2 CONTROLS =====
-  // Joystick - Right hand on Arrow Keys
-  'P2U': ['ArrowUp'],
-  'P2D': ['ArrowDown'],
-  'P2L': ['ArrowLeft'],
-  'P2R': ['ArrowRight'],
-  'P2DL': null,  // Diagonal down-left (no keyboard default)
-  'P2DR': null,  // Diagonal down-right (no keyboard default)
+    // Action Buttons - Left hand (avoiding P1's WASD keys)
+    // Top row (ABC): R, T, Y  |  Bottom row (XYZ): F, G, H
+    'P2A': ['u'],
+    'P2B': ['o'],
+    'P2C': null,
+    'P2X': ['u'],
+    'P2Y': ['o'],
+    'P2Z': null,
 
-  // Action Buttons - Left hand (avoiding P1's WASD keys)
-  // Top row (ABC): R, T, Y  |  Bottom row (XYZ): F, G, H
-  'P2A': ['r'],
-  'P2B': ['t'],
-  'P2C': ['y'],
-  'P2X': ['f'],
-  'P2Y': ['g'],
-  'P2Z': ['h'],
+    // Start Button
+    'START2': ['Enter']
+  };
 
-  // Start Button
-  'START2': ['2']
-};
-
-// Build reverse lookup: keyboard key → arcade button code
-const KEYBOARD_TO_ARCADE = {};
-for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
-  if (keyboardKeys) {
-    // Handle both array and single value
-    const keys = Array.isArray(keyboardKeys) ? keyboardKeys : [keyboardKeys];
-    keys.forEach(key => {
-      KEYBOARD_TO_ARCADE[key] = arcadeCode;
-    });
+  // Build reverse lookup: keyboard key → arcade button code
+  const KEYBOARD_TO_ARCADE = {};
+  for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
+    if (keyboardKeys) {
+      // Handle both array and single value
+      const keys = Array.isArray(keyboardKeys) ? keyboardKeys : [keyboardKeys];
+      keys.forEach(key => {
+        KEYBOARD_TO_ARCADE[key] = arcadeCode;
+      });
+    }
   }
 }
 
@@ -444,7 +441,7 @@ const CONTROLS_CONFIG = {
   player2: {
     title: 'PLAYER 2',
     color: '#0099ff',
-    controls: ['Move: I/K/J/L', 'Shoot: U/P', 'Special: O']
+    controls: ['Move: Arrows', 'Shoot: 0/.', 'Special: .']
   }
 };
 
@@ -1586,7 +1583,7 @@ class GameScene extends Phaser.Scene {
     enemy.type = typeName;
     enemy.health = Math.ceil(typeData.health * DIFFICULTY);
     enemy.speed = typeData.speed;
-    enemy.shootDelay = typeData.shootDelay / this.getSpawnDifficulty();
+    enemy.shootDelay = typeData.shootDelay;
     enemy.spawnTime = this.time.now;
     enemy.lastShot = 0;
     enemy.angle = 0;
@@ -1904,8 +1901,8 @@ class GameScene extends Phaser.Scene {
         // Efecto visual de muerte de enemigo normal
         this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff8800, 10);
 
-        // 3% chance to drop a heart
-        if (Math.random() < 0.03) {
+        // 10% chance to drop a heart
+        if (Math.random() < (0.1 * this.getSpawnDifficulty())) {
           this.spawnPowerup({ x: deathPosition.x, y: deathPosition.y }, 'heart');
         }
       }
@@ -1942,7 +1939,7 @@ class GameScene extends Phaser.Scene {
       // Set invulnerability for 1 second
       player.invulnerable = true;
       player.lastHitTime = this.time.now;
-      this.time.delayedCall(300, () => {
+      this.time.delayedCall(600, () => {
         player.invulnerable = false;
       });
 
@@ -2046,6 +2043,11 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    this.p1.health = this.p1.maxHealth;
+    if (this.numPlayers === 2) {
+      this.p2.health = this.p2.maxHealth;
+    }
+
     // Common boss death logic
     this.bossActive = false;
     this.openDoors();
@@ -2055,7 +2057,7 @@ class GameScene extends Phaser.Scene {
     }
 
     // Show message
-    const msg = this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
+    this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
       fontSize: '32px',
       fontFamily: 'Arial',
       color: '#0ff',
@@ -2079,7 +2081,7 @@ class GameScene extends Phaser.Scene {
       this.p1.setVelocity(0, 0);
 
       // Revival effects
-      this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ff00, 15);
+      //this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ff00, 15);
       this.playSound(800, 0.25);
 
       revivedAny = true;
@@ -2094,7 +2096,7 @@ class GameScene extends Phaser.Scene {
       this.p2.setVelocity(0, 0);
 
       // Revival effects
-      this.createExplosionEffect(this.p2.x, this.p2.y, 0x00ff00, 15);
+      //this.createExplosionEffect(this.p2.x, this.p2.y, 0x00ff00, 15);
       this.playSound(800, 0.25);
 
       revivedAny = true;
@@ -2847,33 +2849,33 @@ class GameScene extends Phaser.Scene {
 
     if (!this.damageTakenThisWave) {
       // NO DAMAGE: 15% rare, 20% common, 15% heart
-      if (chance < 0.15) {
+      if (chance < 0.20) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
       }
-      if (chance < 0.35) {
+      if (chance < 0.45) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
       }
-      if (chance < 0.50) {
+      if (chance < 0.70) {
         this.spawnPowerup(position, 'heart');
         return;
       }
     } else {
       // WITH DAMAGE: 5% rare, 15% common, 15% heart
-      if (chance < 0.05) {
+      if (chance < 0.1) {
         const randomRare = rarePowerups[Math.floor(Math.random() * rarePowerups.length)];
         this.spawnPowerup(position, randomRare);
         return;
       }
-      if (chance < 0.20) {
+      if (chance < 0.30) {
         const randomCommon = commonPowerups[Math.floor(Math.random() * commonPowerups.length)];
         this.spawnPowerup(position, randomCommon);
         return;
       }
-      if (chance < 0.35) {
+      if (chance < 0.50) {
         this.spawnPowerup(position, 'heart');
         return;
       }
@@ -2970,27 +2972,27 @@ class GameScene extends Phaser.Scene {
 
       case 'iceBullets':
         if (player.iceDuration === 0) {
-          player.iceDuration = 4000; // 4s base
+          player.iceDuration = 6000; // 4s base
         } else {
-          player.iceDuration += 2000; // +1s por cada powerup adicional
+          player.iceDuration += 3000; // +1s por cada powerup adicional
         }
         message = `${powerupData.description} (${player.iceDuration / 1000}s)`;
         break;
 
       case 'fireBullets':
         if (player.fireDuration === 0) {
-          player.fireDuration = 3000; // 3s base
+          player.fireDuration = 5000; // 5s base
         } else {
-          player.fireDuration += 1500; // +1s por cada powerup adicional
+          player.fireDuration += 2500; // +2.5s por cada powerup adicional
         }
         message = `${powerupData.description} (${player.fireDuration / 1000}s)`;
         break;
 
       case 'electricBullets':
         if (player.electricDuration === 0) {
-          player.electricDuration = 2000; // 2s base
+          player.electricDuration = 3000; // 2s base
         } else {
-          player.electricDuration += 1000; // +1s por cada powerup adicional
+          player.electricDuration += 2000; // +1s por cada powerup adicional
         }
         message = `${powerupData.description} (${player.electricDuration / 1000}s)`;
         break;
