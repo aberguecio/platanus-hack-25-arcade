@@ -7,7 +7,6 @@ const DEBUG_GODMODE = false;        // Set to true for invincibility
 const DIFFICULTY = 1;            // Difficulty multiplier
 
 const COOP_DIFFICULTY = 1.3;       // Multiplier for 2-player mode (affects enemy count & spawn rate, NOT health)
-const ARCADE_MODE = false;        // Set to true when running on arcade cabinet hardware
 // =============================================================================
 // ARCADE BUTTON MAPPING - COMPLETE TEMPLATE
 // =============================================================================
@@ -20,63 +19,63 @@ const ARCADE_MODE = false;        // Set to true when running on arcade cabinet 
 // To use in your game:
 //   if (key === 'P1U') { ... }  // Works on both arcade and local (via keyboard)
 // =============================================================================
-if (ARCADE_MODE) {
-  const ARCADE_CONTROLS = {
-    // ===== PLAYER 1 CONTROLS =====
-    // Joystick - Left hand on WASD
-    'P1U': ['w'],
-    'P1D': ['s'],
-    'P1L': ['a'],
-    'P1R': ['d'],
-    'P1DL': null,  // Diagonal down-left (no keyboard default)
-    'P1DR': null,  // Diagonal down-right (no keyboard default)
 
-    // Action Buttons - Right hand on home row area (ergonomic!)
-    // Top row (ABC): U, I, O  |  Bottom row (XYZ): J, K, L
-    'P1A': ['q'],
-    'P1B': ['e'],
-    'P1C': null,
-    'P1X': ['q'],
-    'P1Y': ['e'],
-    'P1Z': null,
+const ARCADE_CONTROLS = {
+  // ===== PLAYER 1 CONTROLS =====
+  // Joystick - Left hand on WASD
+  'P1U': ['w'],
+  'P1D': ['s'],
+  'P1L': ['a'],
+  'P1R': ['d'],
+  'P1DL': null,  // Diagonal down-left (no keyboard default)
+  'P1DR': null,  // Diagonal down-right (no keyboard default)
 
-    // Start Button
-    'START1': ['Enter'],
+  // Action Buttons - Right hand on home row area (ergonomic!)
+  // Top row (ABC): U, I, O  |  Bottom row (XYZ): J, K, L
+  'P1A': ['q'],
+  'P1B': ['e'],
+  'P1C': null,
+  'P1X': ['q'],
+  'P1Y': ['e'],
+  'P1Z': null,
 
-    // ===== PLAYER 2 CONTROLS =====
-    // Joystick - Right hand on Arrow Keys
-    'P2U': ['i'],
-    'P2D': ['k'],
-    'P2L': ['j'],
-    'P2R': ['l'],
-    'P2DL': null,  // Diagonal down-left (no keyboard default)
-    'P2DR': null,  // Diagonal down-right (no keyboard default)
+  // Start Button
+  'START1': ['Enter'],
 
-    // Action Buttons - Left hand (avoiding P1's WASD keys)
-    // Top row (ABC): R, T, Y  |  Bottom row (XYZ): F, G, H
-    'P2A': ['u'],
-    'P2B': ['o'],
-    'P2C': null,
-    'P2X': ['u'],
-    'P2Y': ['o'],
-    'P2Z': null,
+  // ===== PLAYER 2 CONTROLS =====
+  // Joystick - Right hand on Arrow Keys
+  'P2U': ['i'],
+  'P2D': ['k'],
+  'P2L': ['j'],
+  'P2R': ['l'],
+  'P2DL': null,  // Diagonal down-left (no keyboard default)
+  'P2DR': null,  // Diagonal down-right (no keyboard default)
 
-    // Start Button
-    'START2': ['Enter']
-  };
+  // Action Buttons - Left hand (avoiding P1's WASD keys)
+  // Top row (ABC): R, T, Y  |  Bottom row (XYZ): F, G, H
+  'P2A': ['u'],
+  'P2B': ['o'],
+  'P2C': null,
+  'P2X': ['u'],
+  'P2Y': ['o'],
+  'P2Z': null,
 
-  // Build reverse lookup: keyboard key → arcade button code
-  const KEYBOARD_TO_ARCADE = {};
-  for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
-    if (keyboardKeys) {
-      // Handle both array and single value
-      const keys = Array.isArray(keyboardKeys) ? keyboardKeys : [keyboardKeys];
-      keys.forEach(key => {
-        KEYBOARD_TO_ARCADE[key] = arcadeCode;
-      });
-    }
+  // Start Button
+  'START2': ['Enter']
+};
+
+// Build reverse lookup: keyboard key → arcade button code
+const KEYBOARD_TO_ARCADE = {};
+for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
+  if (keyboardKeys) {
+    // Handle both array and single value
+    const keys = Array.isArray(keyboardKeys) ? keyboardKeys : [keyboardKeys];
+    keys.forEach(key => {
+      KEYBOARD_TO_ARCADE[key] = arcadeCode;
+    });
   }
 }
+
 
 
 // MENU SCENE
@@ -368,11 +367,6 @@ const POWERUP_TYPES = {
     name: 'Fire Rate Up',
     color: 0xff8800,
     description: 'Faster Shooting'
-  },
-  shield: {
-    name: 'Shield',
-    color: 0x00ffff,
-    description: 'Shield'
   },
   pierceShot: {
     name: 'Pierce Shot',
@@ -719,6 +713,17 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.playerBullets, this.enemies, (b, e) => this.hitEnemy(e, b));
     this.physics.add.overlap(this.playerSpecialBullets, this.enemies, (b, e) => this.hitEnemy(e, b));
 
+    // Special bullets destroy enemy bullets on contact but persist
+    this.physics.add.overlap(this.playerSpecialBullets, this.enemyBullets, (special, enemyB) => {
+      if (enemyB && enemyB.active) {
+        // destroy the enemy bullet only
+        enemyB.destroy();
+        // optional feedback
+        this.playSound && this.playSound(400, 0.06);
+        this.createExplosionEffect && this.createExplosionEffect(enemyB.x, enemyB.y, 0xff0000, 6);
+      }
+    });
+
     // Player overlaps (bullets, doors, powerups)
     this.players.forEach(p => {
       this.physics.add.overlap(this.enemyBullets, p, (player, b) => this.hitPlayer(player, b));
@@ -772,23 +777,11 @@ class GameScene extends Phaser.Scene {
       color: '#0f0'
     });
 
-    this.shieldText1 = this.add.text(20, 20, '', {
-      fontSize: '15px',
-      fontFamily: 'Arial',
-      color: '#0ff'
-    });
-
     if (this.numPlayers === 2) {
       this.hpText2 = this.add.text(780, 20, 'P2: 100 HP', {
         fontSize: '20px',
         fontFamily: 'Arial',
         color: '#09f'
-      }).setOrigin(1, 0);
-
-      this.shieldText2 = this.add.text(780, 20, '', {
-        fontSize: '15px',
-        fontFamily: 'Arial',
-        color: '#0ff'
       }).setOrigin(1, 0);
     }
 
@@ -1049,7 +1042,7 @@ class GameScene extends Phaser.Scene {
     this.enemies.children.entries.forEach(e => {
       if (e.isBoss) {
         if (e.bossType === 'twin1' || e.bossType === 'twin2') {
-          this.updateTwin(e, time, 1.0, 1.0); // Twins have own update
+          this.updateTwin(e, time); // Twins have own update
         } else {
           this.updateBoss(e, time, delta);
         }
@@ -1086,18 +1079,17 @@ class GameScene extends Phaser.Scene {
       });
     }
 
-    // Update UI with hearts and shields
-    const hearts1 = this.p1Alive ? ('♥'.repeat(Math.max(0, this.p1.health)) + '♡'.repeat(Math.max(0, this.p1.maxHealth - this.p1.health))) : 'DEAD';
-    const shields1 = this.p1Alive && this.p1.maxShields > 0 ? (' ⛊'.repeat(Math.max(0, this.p1.shields)) + '⛉'.repeat(Math.max(0, this.p1.maxShields - this.p1.shields))) : '';
+    // Update UI with hearts 
+    const hearts1 = this.p1Alive
+      ? ('♥'.repeat(Math.max(0, this.p1.health)) + '♡'.repeat(Math.max(0, this.p1.maxHealth - this.p1.health)))
+      : 'DEAD';
     this.hpText1.setText('P1: ' + hearts1);
-    this.shieldText1.setText(shields1);
-    this.shieldText1.setPosition(20 + this.hpText1.width, 23);
+
     if (this.numPlayers === 2) {
-      const hearts2 = this.p2Alive ? ('♥'.repeat(Math.max(0, this.p2.health)) + '♡'.repeat(Math.max(0, this.p2.maxHealth - this.p2.health))) : 'DEAD';
-      const shields2 = this.p2Alive && this.p2.maxShields > 0 ? ('⛊'.repeat(Math.max(0, this.p2.shields)) + '⛉'.repeat(Math.max(0, this.p2.maxShields - this.p2.shields)) + ' ') : '';
+      const hearts2 = this.p2Alive
+        ? ('♥'.repeat(Math.max(0, this.p2.health)) + '♡'.repeat(Math.max(0, this.p2.maxHealth - this.p2.health)))
+        : 'DEAD';
       this.hpText2.setText('P2: ' + hearts2);
-      this.shieldText2.setText(shields2);
-      this.shieldText2.setPosition(780 - this.shieldText2.width, 23);
     }
 
     // Update cooldowns for all players
@@ -1152,8 +1144,6 @@ class GameScene extends Phaser.Scene {
     p.specialBullets = state ? state.specialBullets : 1;
     p.specialCooldown = state ? state.specialCooldown : 2000;
     p.normalShotCooldown = state ? state.normalShotCooldown : 300;
-    p.shields = state ? state.shields : 0;
-    p.maxShields = state ? state.maxShields : 0;
     p.pierce = state ? state.pierce : 0;
     p.damageMultiplier = state ? state.damageMultiplier : 1.0;
     p.spreadBullets = state ? state.spreadBullets : 1;
@@ -1205,14 +1195,6 @@ class GameScene extends Phaser.Scene {
       this.graphics.lineBetween(player.x, player.y,
         player.x + Math.cos(angle) * 20,
         player.y + Math.sin(angle) * 20);
-    }
-    // Draw shields (multiple circles for multiple shields)
-    if (player.shields > 0) {
-      const pulse = Math.sin(time * 0.01) * 0.3 + 0.7;
-      for (let i = 0; i < Math.min(player.shields, 5); i++) {
-        this.graphics.lineStyle(2, 0x00ffff, pulse * (1 - i * 0.15));
-        this.graphics.strokeCircle(player.x, player.y, 21 + i * 3);
-      }
     }
     // Special ready effect (short burst when charged)
     if (player.specialReadyEffect > 0) {
@@ -1593,15 +1575,11 @@ class GameScene extends Phaser.Scene {
     // Process elemental effects
     const effects = this.processElementalEffects(enemy, time, (e) => {
       const deathPosition = { x: e.x, y: e.y };
-      if (e.isBoss) {
-        this.handleBossDeath(e, deathPosition);
-      } else {
-        this.lastEnemyPosition = deathPosition;
-        const typeData = ENEMY_TYPES[e.type];
-        this.score += typeData.points;
-        this.scoreText.setText('Score: ' + this.score);
-        this.playSound(500, 0.1);
-      }
+      this.lastEnemyPosition = deathPosition;
+      const typeData = ENEMY_TYPES[e.type];
+      this.score += typeData.points;
+      this.scoreText.setText('Score: ' + this.score);
+      this.playSound(500, 0.1);
     });
     if (!effects) return; // Entity paralyzed or dead
 
@@ -1640,7 +1618,8 @@ class GameScene extends Phaser.Scene {
   shootCircle(src, count, offset = 0, spd = 200, rad = 20, lifetime = 3000) {
     for (let i = 0; i < count; i++) {
       const a = offset + i * Math.PI * 2 / count;
-      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime, true);
+      this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime, false);
+      this.playSound(500, 0.1)
     }
   }
 
@@ -1917,14 +1896,6 @@ class GameScene extends Phaser.Scene {
       // Check invulnerability
       if (player.invulnerable) return;
 
-      // Shield absorbs hit
-      if (player.shields > 0) {
-        player.shields--;
-        this.playSound(400, 0.2); // Sonido de shield roto
-        // Efecto visual de shield roto
-        this.createExplosionEffect(player.x, player.y, 0x00ffff, 12);
-        return;
-      }
 
       player.health -= 1; // 1 heart damage
       this.damageTakenThisWave = true;
@@ -1990,7 +1961,7 @@ class GameScene extends Phaser.Scene {
     this.time.delayedCall(2000, () => waveMsg.destroy());
 
     // Check if this is a boss wave
-    if (this.wave === 5 || this.wave % 10 === 0) {
+    if (this.wave % 5 === 0) {
       this.spawnBoss();
       this.enemiesPerWave = 1;
     } else {
@@ -2010,6 +1981,14 @@ class GameScene extends Phaser.Scene {
         this.score += 250;
         this.scoreText.setText('Score: ' + this.score);
         this.playSound(600, 0.3);
+        // Ensure the surviving twin keeps attacking immediately
+        try {
+          otherTwin.isAttacking = true;
+          otherTwin.phaseStartTime = this.time.now;
+          otherTwin.spiralFired = false;
+        } catch (e) {
+          // defensive: ignore if otherTwin state not writable
+        }
         return; // Don't end boss fight yet
       } else {
         // Both twins dead
@@ -2081,7 +2060,7 @@ class GameScene extends Phaser.Scene {
       this.p1.setVelocity(0, 0);
 
       // Revival effects
-      //this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ff00, 15);
+      this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ff00, 15);
       this.playSound(800, 0.25);
 
       revivedAny = true;
@@ -2096,7 +2075,7 @@ class GameScene extends Phaser.Scene {
       this.p2.setVelocity(0, 0);
 
       // Revival effects
-      //this.createExplosionEffect(this.p2.x, this.p2.y, 0x00ff00, 15);
+      this.createExplosionEffect(this.p2.x, this.p2.y, 0x00ff00, 15);
       this.playSound(800, 0.25);
 
       revivedAny = true;
@@ -2433,7 +2412,7 @@ class GameScene extends Phaser.Scene {
     let bossType, typeData, bossName;
     if (this.wave === 5) bossType = 'pattern';
     else if (this.wave === 10) bossType = 'twins';
-    else if (this.wave === 20) bossType = 'laser';
+    else if (this.wave === 15) bossType = 'laser';
     else {
       // Generate random boss (wave 30+)
       bossType = 'random';
@@ -2746,7 +2725,15 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  updateTwin(twin, time, speedMultiplier, shootDelayMultiplier) {
+  updateTwin(twin, time) {
+    // Apply elemental effects (freeze, burn, electric stun) to twins as well
+    const effects = this.processElementalEffects(twin, time, (t) => {
+      const deathPosition = { x: t.x, y: t.y };
+      this.handleBossDeath(t, deathPosition);
+    });
+    if (!effects) return; // Paralyzed or handled by elemental effect
+    // Combine passed multipliers with elemental modifiers
+    const { speedMultiplier, shootDelayMultiplier } = effects;
     // Find nearest player
     const target = this.getNearestPlayer(twin.x, twin.y);
 
@@ -2836,14 +2823,14 @@ class GameScene extends Phaser.Scene {
 
   trySpawnPowerup(isBoss, position) {
     if (isBoss) {
-      const bossDrops = ['extraBullet', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets','spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot']; // 'speedBoost', 'fireRate', 'shield' and 'moreDamage' are left out
+      const bossDrops = ['extraBullet', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets','spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot']; // 'speedBoost', 'fireRate', and 'moreDamage' are left out
       const randomDrop = bossDrops[Math.floor(Math.random() * bossDrops.length)];
       this.spawnPowerup(position, randomDrop);
       return;
     }
 
     // Waves normales: SIN DAÑO primero
-    const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'shield', 'moreDamage', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets'];
+  const commonPowerups = ['extraBullet', 'speedBoost', 'fireRate', 'moreDamage', 'backShot', 'iceBullets', 'fireBullets', 'electricBullets'];
     const rarePowerups = ['spreadShot', 'homingBullets', 'bounce', 'maxHeart', 'pierceShot'];
     const chance = Math.random() / this.getSpawnDifficulty(); // Adjust chance by difficulty
 
@@ -2934,11 +2921,7 @@ class GameScene extends Phaser.Scene {
         message = `${powerupData.description}`;
         break;
 
-      case 'shield':
-        player.shields++;
-        player.maxShields++;
-        message = `${powerupData.description} (${player.shields})`;
-        break;
+      
 
       case 'pierceShot':
         player.pierce++;
@@ -3053,8 +3036,6 @@ class GameScene extends Phaser.Scene {
       this.graphics.lineStyle(2, 0xffffff, p);
       this.graphics.lineBetween(0, 0, 0, -6);
       this.graphics.lineBetween(0, 0, 4, 4);
-    } else if (powerup.type === 'shield') {
-      this.graphics.strokeCircle(0, 0, 6);
     } else if (powerup.type === 'pierceShot') {
       this.graphics.lineStyle(2, 0xffffff, p);
       this.graphics.lineBetween(-6, 0, 6, 0);
@@ -3173,8 +3154,6 @@ class GameScene extends Phaser.Scene {
       specialBullets: player.specialBullets,
       specialCooldown: player.specialCooldown,
       normalShotCooldown: player.normalShotCooldown,
-      shields: player.maxShields, // Shields se restauran al máximo al pasar de mapa
-      maxShields: player.maxShields,
       pierce: player.pierce,
       damageMultiplier: player.damageMultiplier,
       spreadBullets: player.spreadBullets,
