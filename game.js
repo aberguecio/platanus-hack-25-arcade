@@ -7,60 +7,57 @@ const DEBUG_GODMODE = false;        // Set to true for invincibility
 const DIFFICULTY = 1;            // Difficulty multiplier
 
 const COOP_DIFFICULTY = 1.3;       // Multiplier for 2-player mode (affects enemy count & spawn rate and boss health)
+const ARCADE_MODE = false;
 
-const ARCADE_CONTROLS = {
-  // ===== PLAYER 1 CONTROLS =====
-  // Joystick - Left hand on WASD
-  'P1U': ['w'],
-  'P1D': ['s'],
-  'P1L': ['a'],
-  'P1R': ['d'],
-  'P1DL': null,  // Diagonal down-left (no keyboard default)
-  'P1DR': null,  // Diagonal down-right (no keyboard default)
 
-  // Action Buttons - Right hand on home row area (ergonomic!)
-  // Top row (ABC): U, I, O  |  Bottom row (XYZ): J, K, L
-  'P1A': ['q'],
-  'P1B': ['e'],
-  'P1C': null,
-  'P1X': ['q'],
-  'P1Y': ['e'],
-  'P1Z': null,
 
-  // Start Button
-  'START1': ['Enter'],
+if (ARCADE_MODE) {
+  const ARCADE_CONTROLS = {
+    // ===== PLAYER 1 CONTROLS =====
+    // Joystick - Left hand on WASD
+    'P1U': ['w'],
+    'P1D': ['s'],
+    'P1L': ['a'],
+    'P1R': ['d'],
 
-  // ===== PLAYER 2 CONTROLS =====
-  // Joystick - Right hand on Arrow Keys
-  'P2U': ['i'],
-  'P2D': ['k'],
-  'P2L': ['j'],
-  'P2R': ['l'],
-  'P2DL': null,  // Diagonal down-left (no keyboard default)
-  'P2DR': null,  // Diagonal down-right (no keyboard default)
+    // Action Buttons - Right hand on home row area (ergonomic!)
+    // Top row (ABC): U, I, O  |  Bottom row (XYZ): J, K, L
+    'P1A': ['q'],
+    'P1B': ['e'],
+    'P1X': ['q'],
+    'P1Y': ['e'],
 
-  // Action Buttons - Left hand (avoiding P1's WASD keys)
-  // Top row (ABC): R, T, Y  |  Bottom row (XYZ): F, G, H
-  'P2A': ['u'],
-  'P2B': ['o'],
-  'P2C': null,
-  'P2X': ['u'],
-  'P2Y': ['o'],
-  'P2Z': null,
+    // Start Button
+    'START1': ['Enter'],
 
-  // Start Button
-  'START2': ['Enter']
-};
+    // ===== PLAYER 2 CONTROLS =====
+    // Joystick - Right hand on Arrow Keys
+    'P2U': ['i'],
+    'P2D': ['k'],
+    'P2L': ['j'],
+    'P2R': ['l'],
 
-// Build reverse lookup: keyboard key → arcade button code
-const KEYBOARD_TO_ARCADE = {};
-for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
-  if (keyboardKeys) {
-    // Handle both array and single value
-    const keys = Array.isArray(keyboardKeys) ? keyboardKeys : [keyboardKeys];
-    keys.forEach(key => {
-      KEYBOARD_TO_ARCADE[key] = arcadeCode;
-    });
+    // Action Buttons - Left hand (avoiding P1's WASD keys)
+    // Top row (ABC): R, T, Y  |  Bottom row (XYZ): F, G, H
+    'P2A': ['u'],
+    'P2B': ['o'],
+    'P2X': ['u'],
+    'P2Y': ['o'],
+
+    // Start Button
+    'START2': ['Enter']
+  };
+
+  // Build reverse lookup: keyboard key → arcade button code
+  const KEYBOARD_TO_ARCADE = {};
+  for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
+    if (keyboardKeys) {
+      // Handle both array and single value
+      const keys = Array.isArray(keyboardKeys) ? keyboardKeys : [keyboardKeys];
+      keys.forEach(key => {
+        KEYBOARD_TO_ARCADE[key] = arcadeCode;
+      });
+    }
   }
 }
 
@@ -93,6 +90,34 @@ class MenuScene extends Phaser.Scene {
       strokeThickness: 4
     }).setOrigin(0.5);
 
+    // High scores helper functions
+    const getHighScores = () => {
+      try {
+        const scores = document.cookie.match('(^| )obs_highScores=([^;]+)');
+        return scores ? JSON.parse(decodeURIComponent(scores[2])) : [];
+      } catch(e) {
+        return [];
+      }
+    };
+
+    // High scores section
+    const scores = getHighScores();
+    if (scores.length > 0) {
+      this.add.text(400, 360, 'HIGH SCORES', {
+        fontSize: '20px',
+        fontFamily: 'Arial',
+        color: '#ffcc00'
+      }).setOrigin(0.5);
+
+      scores.forEach((score, i) => {
+        this.add.text(400, 390 + i * 25, `${i + 1}. ${score.name} - ${score.score}`, {
+          fontSize: '16px',
+          fontFamily: 'Arial',
+          color: i === 0 ? '#ffcc00' : '#cc9900'
+        }).setOrigin(0.5);
+      });
+    }
+
     // Menu options text
     this.text1 = this.add.text(400, 240, '1 PLAYER', {
       fontSize: '36px',
@@ -107,9 +132,7 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Controls infographic
-    const cy = 400;
-    this.add.text(400, cy, 'CONTROLS', {fontSize: '24px', fontFamily: 'Arial', color: '#ffff00'}).setOrigin(0.5);
-
+    const cy = 420;
     // Render player controls
     renderPlayerControls(this, 200, cy + 40, CONTROLS_CONFIG.player1);
     renderPlayerControls(this, 600, cy + 40, CONTROLS_CONFIG.player2);
@@ -200,38 +223,32 @@ class MenuScene extends Phaser.Scene {
     const beatDuration = 0.5;
     const loopLength = progression.length * 2 * beatDuration;
 
+    // Helper to schedule a single note (oscillator + gain envelope)
+    const scheduleNote = (freq, startTime, duration, type = 'triangle', peak = 0.3, attack = 0.05, endGain = 0.01) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.frequency.value = freq;
+      osc.type = type;
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(peak, startTime + attack);
+      gain.gain.exponentialRampToValueAtTime(endGain, startTime + duration);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+
     const playChord = (chordNotes, startTime, duration) => {
-      chordNotes.forEach((freq) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(masterGain);
-        osc.frequency.value = freq;
-        osc.type = 'triangle';
-        gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-        osc.start(startTime);
-        osc.stop(startTime + duration);
-      });
+      chordNotes.forEach(freq => scheduleNote(freq, startTime, duration, 'triangle', 0.3, 0.05, 0.01));
     };
 
     const melodyPattern = [0, 2, 1, 2];
     const playMelody = (chordNotes, startTime, totalDuration) => {
       melodyPattern.forEach((noteIndex, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(masterGain);
-        osc.frequency.value = chordNotes[noteIndex] * 2;
-        osc.type = 'square';
         const noteStart = startTime + (i * totalDuration / melodyPattern.length);
         const noteDuration = totalDuration / melodyPattern.length;
-        gain.gain.setValueAtTime(0, noteStart);
-        gain.gain.linearRampToValueAtTime(0.15, noteStart + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.01, noteStart + noteDuration);
-        osc.start(noteStart);
-        osc.stop(noteStart + noteDuration);
+        const freq = chordNotes[noteIndex] * 2;
+        scheduleNote(freq, noteStart, noteDuration, 'square', 0.15, 0.01, 0.01);
       });
     };
 
@@ -567,85 +584,49 @@ class GameScene extends Phaser.Scene {
     // Graphics object
     this.graphics = this.add.graphics();
 
-    // Arena walls
-    this.walls = this.physics.add.staticGroup();
+    // Arena walls helper function
+    this.createWallAndDoors = () => {
+      this.walls = this.physics.add.staticGroup();
+      this.doorWalls = this.physics.add.staticGroup();
+      this.doorZones = this.physics.add.staticGroup();
+      
+      // Config for walls and doors
+      const cfg = {
+        top: {wall: [[190,10,380,20], [610,10,380,20]], door: [400,10,40,20]},
+        bottom: {wall: [[190,590,380,20], [610,590,380,20]], door: [400,590,40,20]},
+        left: {wall: [[10,140,20,280], [10,460,20,280]], door: [10,300,20,40]},
+        right: {wall: [[790,140,20,280], [790,460,20,280]], door: [790,300,20,40]}
+      };
 
-    // Top wall segments
-    // Door at x: 380-420
-    const wallTopLeft = this.walls.create(190, 10, null); // x: 0-380
-    wallTopLeft.body.setSize(380, 20);
-    wallTopLeft.setVisible(false);
+      // Create walls and doors
+      Object.entries(cfg).forEach(([side, data]) => {
+        // Create walls
+        data.wall.forEach(([x,y,w,h]) => {
+          const wall = this.walls.create(x, y, null);
+          wall.body.setSize(w, h);
+          wall.setVisible(false);
+        });
 
-    const wallTopRight = this.walls.create(610, 10, null); // x: 420-800
-    wallTopRight.body.setSize(380, 20);
-    wallTopRight.setVisible(false);
+        // Create door wall
+        const [x,y,w,h] = data.door;
+        const doorWall = this.doorWalls.create(x, y, null);
+        doorWall.body.setSize(w, h);
+        doorWall.setVisible(false);
+        this['doorWall' + side.charAt(0).toUpperCase() + side.slice(1)] = doorWall;
 
-    // Bottom wall segments
-    const wallBottomLeft = this.walls.create(190, 590, null); // x: 0-380
-    wallBottomLeft.body.setSize(380, 20);
-    wallBottomLeft.setVisible(false);
+        // Create door zone
+        const doorZone = this.doorZones.create(x, y, null);
+        doorZone.body.setSize(w, h);
+        doorZone.setVisible(false);
+        this['door' + side.charAt(0).toUpperCase() + side.slice(1)] = doorZone;
+      });
 
-    const wallBottomRight = this.walls.create(610, 590, null); // x: 420-800
-    wallBottomRight.body.setSize(380, 20);
-    wallBottomRight.setVisible(false);
+      // Array for easy door management
+      this.doorWallArray = [this.doorWallTop, this.doorWallBottom, this.doorWallLeft, this.doorWallRight];
+    };
 
-    // Left wall segments
-    // Door at y: 280-320
-    const wallLeftTop = this.walls.create(10, 140, null); // y: 0-280
-    wallLeftTop.body.setSize(20, 280);
-    wallLeftTop.setVisible(false);
-
-    const wallLeftBottom = this.walls.create(10, 460, null); // y: 320-600
-    wallLeftBottom.body.setSize(20, 280);
-    wallLeftBottom.setVisible(false);
-
-    // Right wall segments
-    const wallRightTop = this.walls.create(790, 140, null); // y: 0-280
-    wallRightTop.body.setSize(20, 280);
-    wallRightTop.setVisible(false);
-
-    const wallRightBottom = this.walls.create(790, 460, null); // y: 320-600
-    wallRightBottom.body.setSize(20, 280);
-    wallRightBottom.setVisible(false);
-
-    // Door walls (dynamically enabled/disabled)
-    this.doorWalls = this.physics.add.staticGroup();
-    this.doorWallTop = this.doorWalls.create(400, 10, null);
-    this.doorWallTop.body.setSize(40, 20);
-    this.doorWallTop.setVisible(false);
-
-    this.doorWallBottom = this.doorWalls.create(400, 590, null);
-    this.doorWallBottom.body.setSize(40, 20);
-    this.doorWallBottom.setVisible(false);
-
-    this.doorWallLeft = this.doorWalls.create(10, 300, null);
-    this.doorWallLeft.body.setSize(20, 40);
-    this.doorWallLeft.setVisible(false);
-
-    this.doorWallRight = this.doorWalls.create(790, 300, null);
-    this.doorWallRight.body.setSize(20, 40);
-    this.doorWallRight.setVisible(false);
-
-    // Array for easy door management
-    this.doorWallArray = [this.doorWallTop, this.doorWallBottom, this.doorWallLeft, this.doorWallRight];
-
-    // Door zones (overlap detection when open)
-    this.doorZones = this.physics.add.staticGroup();
-    this.doorTop = this.doorZones.create(400, 10, null);
-    this.doorTop.body.setSize(40, 20);
-    this.doorTop.setVisible(false);
-
-    this.doorBottom = this.doorZones.create(400, 590, null);
-    this.doorBottom.body.setSize(40, 20);
-    this.doorBottom.setVisible(false);
-
-    this.doorLeft = this.doorZones.create(10, 300, null);
-    this.doorLeft.body.setSize(20, 40);
-    this.doorLeft.setVisible(false);
-
-    this.doorRight = this.doorZones.create(790, 300, null);
-    this.doorRight.body.setSize(20, 40);
-    this.doorRight.setVisible(false);
+    // Create walls and doors
+    this.createWallAndDoors();
 
     // Obstacles (loaded dynamically)
     this.obstacles = this.physics.add.staticGroup();
@@ -2173,6 +2154,16 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  setCookie(name, value) {
+    try {
+      const d = new Date();
+      d.setTime(d.getTime() + 31536000000);
+      const expires = 'expires=' + d.toUTCString();
+      document.cookie = `${name}=${encodeURIComponent(value)};${expires};path=/;SameSite=Lax`;
+    } catch (e) {
+    }
+  }
+
   endGame() {
     this.gameOver = true;
 
@@ -2207,6 +2198,74 @@ class GameScene extends Phaser.Scene {
       fontFamily: 'Arial',
       color: '#fff'
     }).setOrigin(0.5);
+
+    // High scores system
+    const getHighScores = () => {
+      try {
+        const scores = document.cookie.match('(^| )obs_highScores=([^;]+)');
+        return scores ? JSON.parse(decodeURIComponent(scores[2])) : [];
+      } catch(e) {
+        return [];
+      }
+    };
+
+    const isHighScore = (score) => {
+      const scores = getHighScores();
+      return scores.length < 5 || score > scores[scores.length - 1].score;
+    };
+
+    const saveHighScore = (name, score) => {
+      let scores = getHighScores();
+      scores.push({name, score});
+      scores.sort((a, b) => b.score - a.score);
+      scores = scores.slice(0, 5); // Keep only top 5
+      this.setCookie('obs_highScores', JSON.stringify(scores));
+    };
+
+    // High score entry
+    if (isHighScore(this.score)) {
+      let n=['A','A','A','A','A'], p=0;
+      const tn=this.add.text(400,420,'NEW HIGH SCORE!\nNAME: '+n.join(''),{
+        fontSize:'32px',
+        fontFamily:'Arial',
+        color:'#b800c2ff',
+        align: 'center'
+      }).setOrigin(0.5);
+      
+      const h=(e)=>{
+        const k=e.key.toLowerCase();
+        if(k==='w')n[p]=String.fromCharCode((n[p].charCodeAt(0)-65+1)%26+65);
+        else if(k==='s')n[p]=String.fromCharCode((n[p].charCodeAt(0)-65+25)%26+65);
+        else if(k==='a')p=Math.max(0,p-1);
+        else if(k==='d')p=Math.min(4,p+1);
+        else if(k==='enter'){
+          saveHighScore(n.join(''), this.score);
+          this.input.keyboard.off('keydown',h);
+          tn.setText('SAVED!\n'+n.join('')+' - '+this.score);
+          return;
+        }
+        tn.setText('NEW HIGH SCORE!\nNAME: '+n.join('')+' '+(p+1));
+      };
+      this.input.keyboard.on('keydown',h);
+
+      // Show current high scores
+      const scores = getHighScores();
+      if (scores.length > 0) {
+        this.add.text(400, 500, 'CURRENT HIGH SCORES', {
+          fontSize: '16px',
+          fontFamily: 'Arial',
+          color: '#888888'
+        }).setOrigin(0.5);
+
+        scores.forEach((score, i) => {
+          this.add.text(400, 525 + i * 20, `${i + 1}. ${score.name} - ${score.score}`, {
+            fontSize: '14px',
+            fontFamily: 'Arial',
+            color: '#666666'
+          }).setOrigin(0.5);
+        });
+      }
+    }
 
     // Match statistics section
     this.add.text(400, 210, 'MATCH STATISTICS', {
