@@ -103,14 +103,14 @@ class MenuScene extends Phaser.Scene {
     // High scores section
     const scores = getHighScores();
     if (scores.length > 0) {
-      this.add.text(400, 360, 'HIGH SCORES', {
+      this.add.text(400, 380, 'HIGH SCORES', {
         fontSize: '20px',
         fontFamily: 'Arial',
         color: '#ffcc00'
       }).setOrigin(0.5);
 
       scores.forEach((score, i) => {
-        this.add.text(400, 390 + i * 25, `${i + 1}. ${score.name} - ${score.score}`, {
+        this.add.text(400, 410 + i * 25, `${i + 1}. ${score.name} - ${score.score}`, {
           fontSize: '16px',
           fontFamily: 'Arial',
           color: i === 0 ? '#ffcc00' : '#cc9900'
@@ -131,11 +131,10 @@ class MenuScene extends Phaser.Scene {
       color: '#0099ff'
     }).setOrigin(0.5);
 
-    // Controls infographic
-    const cy = 420;
+
     // Render player controls
-    renderPlayerControls(this, 200, cy + 40, CONTROLS_CONFIG.player1);
-    renderPlayerControls(this, 600, cy + 40, CONTROLS_CONFIG.player2);
+    renderPlayerControls(this, 200, 430, CONTROLS_CONFIG.player1);
+    renderPlayerControls(this, 600, 430, CONTROLS_CONFIG.player2);
 
     // Instructions for menu navigation
     this.add.text(400, 560, 'Press W/S to select, Enter to start', {
@@ -2225,7 +2224,14 @@ class GameScene extends Phaser.Scene {
     // High score entry
     if (isHighScore(this.score)) {
       let n=['A','A','A','A','A'], p=0;
-      const tn=this.add.text(400,420,'NEW HIGH SCORE!\nNAME: '+n.join(''),{
+      const nm = n.map((c,i)=>i===p ? `[${c}]` : c).join('');
+      this.add.text(400,430,'NEW HIGH SCORE!',{
+        fontSize:'32px',
+        fontFamily:'Arial',
+        color:'#ece000ff',
+        align: 'center'
+      }).setOrigin(0.5);
+      const tn=this.add.text(400,470,'NAME: '+nm,{
         fontSize:'32px',
         fontFamily:'Arial',
         color:'#b800c2ff',
@@ -2244,27 +2250,9 @@ class GameScene extends Phaser.Scene {
           tn.setText('SAVED!\n'+n.join('')+' - '+this.score);
           return;
         }
-        tn.setText('NEW HIGH SCORE!\nNAME: '+n.join('')+' '+(p+1));
+        tn.setText('NAME: '+n.map((c,i)=>i===p ? `[${c}]` : c).join(''));
       };
       this.input.keyboard.on('keydown',h);
-
-      // Show current high scores
-      const scores = getHighScores();
-      if (scores.length > 0) {
-        this.add.text(400, 500, 'CURRENT HIGH SCORES', {
-          fontSize: '16px',
-          fontFamily: 'Arial',
-          color: '#888888'
-        }).setOrigin(0.5);
-
-        scores.forEach((score, i) => {
-          this.add.text(400, 525 + i * 20, `${i + 1}. ${score.name} - ${score.score}`, {
-            fontSize: '14px',
-            fontFamily: 'Arial',
-            color: '#666666'
-          }).setOrigin(0.5);
-        });
-      }
     }
 
     // Match statistics section
