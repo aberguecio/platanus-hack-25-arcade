@@ -347,7 +347,7 @@ const POWERUP_TYPES = {
   speedBoost: {
     name: 'Speed Boost',
     color: 0x00aaff,
-    description: '+15% Speed'
+    description: '+25% Speed'
   },
   fireRate: {
     name: 'Fire Rate Up',
@@ -1375,6 +1375,30 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // Helper: spawn a player bullet at a position with common setup
+  spawnPlayerBullet(group, x, y, vx, vy, size, damage, player, elementalType, color) {
+    // Validate spawn position (margin 7 as used in original code)
+    if (!this.isBulletPositionValid(x, y, 7)) return null;
+
+    const b = group.create(x, y);
+    b.setSize(size, size);
+    b.setVisible(false);
+    b.setVelocity(vx, vy);
+
+    b.damage = damage;
+    b.pierce = player.pierce;
+    b.bounceCount = player.bounceCount;
+    b.bounces = 0;
+    b.homingStrength = player.homingStrength;
+    b.owner = player;
+
+    if (elementalType) this.applyElementalProperties(b, elementalType, color);
+    else b.color = color;
+
+    this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
+    return b;
+  }
+
   shootPlayer(player, special) {
     const angle = player.angle * Math.PI / 180;
     const speed = special ? 250 : 400;
@@ -1405,44 +1429,37 @@ class GameScene extends Phaser.Scene {
         const spreadAngle = angle + offset;
         const posX = player.x + Math.cos(spreadAngle) * 25;
         const posY = player.y + Math.sin(spreadAngle) * 25;
-        if (this.isBulletPositionValid(posX, posY, 7)){
-          const b = group.create(posX, posY);
-          b.setSize(16, 16);
-          b.setVisible(false);
-          b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
-          b.damage = damage;
-          b.pierce = player.pierce;
-          b.bounceCount = player.bounceCount;
-          b.bounces = 0;
-          b.homingStrength = player.homingStrength;
-          b.owner = player;
-
-          this.applyElementalProperties(b, elementalType, color);
-          this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
-        }
+        this.spawnPlayerBullet(
+          group,
+          posX,
+          posY,
+          Math.cos(spreadAngle) * speed,
+          Math.sin(spreadAngle) * speed,
+          16,
+          damage,
+          player,
+          elementalType,
+          color
+        );
       }
 
       // BackShot
       if (player.hasBackShot) {
         const backAngle = angle + Math.PI; // 180 grados opuesto
-        const b = group.create(
-          player.x + Math.cos(backAngle) * 25,
-          player.y + Math.sin(backAngle) * 25
+        const posX = player.x + Math.cos(backAngle) * 25;
+        const posY = player.y + Math.sin(backAngle) * 25;
+        this.spawnPlayerBullet(
+          group,
+          posX,
+          posY,
+          Math.cos(backAngle) * speed,
+          Math.sin(backAngle) * speed,
+          16,
+          damage,
+          player,
+          elementalType,
+          color
         );
-        b.setSize(16, 16);
-        b.setVisible(false);
-        b.setVelocity(Math.cos(backAngle) * speed, Math.sin(backAngle) * speed);
-        b.damage = damage;
-        b.pierce = player.pierce;
-        b.bounceCount = player.bounceCount;
-        b.bounces = 0;
-        b.homingStrength = player.homingStrength;
-        b.owner = player;
-
-        // Apply same element
-        this.applyElementalProperties(b, elementalType, color);
-
-        this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
       }
 
       this.playSound(600, 0.2);
@@ -1461,21 +1478,18 @@ class GameScene extends Phaser.Scene {
         const spreadAngle = angle + offset;
         const posX = player.x + Math.cos(spreadAngle) * 25;
         const posY = player.y + Math.sin(spreadAngle) * 25;
-        if (this.isBulletPositionValid(posX, posY, 7)){
-          const b = group.create(posX, posY);
-          b.setSize(8, 8);
-          b.setVisible(false);
-          b.setVelocity(Math.cos(spreadAngle) * speed, Math.sin(spreadAngle) * speed);
-          b.color = color;
-          b.damage = damage;
-          b.pierce = player.pierce;
-          b.bounceCount = player.bounceCount;
-          b.bounces = 0;
-          b.homingStrength = player.homingStrength;
-          b.owner = player;
-
-          this.scheduleBulletDestroy(b, this.getBulletLifetime(player));
-        }
+        this.spawnPlayerBullet(
+          group,
+          posX,
+          posY,
+          Math.cos(spreadAngle) * speed,
+          Math.sin(spreadAngle) * speed,
+          8,
+          damage,
+          player,
+          null,
+          color
+        );
       }
       this.playSound(800, 0.08);
       // Small muzzle flash
@@ -2904,7 +2918,6 @@ class GameScene extends Phaser.Scene {
     switch(type) {
       case 'extraBullet':
         player.specialBullets++;
-        player.specialCooldown += 300; // +300ms solo para extraBullet
         message = `${powerupData.description} (${player.specialBullets})`;
         break;
 
@@ -2914,8 +2927,8 @@ class GameScene extends Phaser.Scene {
         break;
 
       case 'fireRate':
-        player.normalShotCooldown = Math.max(50, player.normalShotCooldown * 0.75); // -30% cooldown
-        player.specialCooldown = Math.max(300, player.specialCooldown * 0.75); // -30% cooldown for special
+        player.normalShotCooldown = Math.max(50, player.normalShotCooldown * 0.75); // -25% cooldown
+        player.specialCooldown = Math.max(300, player.specialCooldown * 0.75); // -25% cooldown for special
         message = `${powerupData.description}`;
         break;
 
@@ -2951,9 +2964,9 @@ class GameScene extends Phaser.Scene {
 
       case 'iceBullets':
         if (player.iceDuration === 0) {
-          player.iceDuration = 6000; // 4s base
+          player.iceDuration = 8000; // 8s base
         } else {
-          player.iceDuration += 3000; // +1s por cada powerup adicional
+          player.iceDuration += 4000; // +4s por cada powerup adicional
         }
         message = `${powerupData.description} (${player.iceDuration / 1000}s)`;
         break;
@@ -2962,7 +2975,7 @@ class GameScene extends Phaser.Scene {
         if (player.fireDuration === 0) {
           player.fireDuration = 5000; // 5s base
         } else {
-          player.fireDuration += 2500; // +2.5s por cada powerup adicional
+          player.fireDuration += 3000; // +3s por cada powerup adicional
         }
         message = `${powerupData.description} (${player.fireDuration / 1000}s)`;
         break;
