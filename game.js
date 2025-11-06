@@ -437,7 +437,7 @@ const CONTROLS_CONFIG = {
   player2: {
     title: 'PLAYER 2',
     color: '#0099ff',
-    controls: ['Move: Arrows', 'Shoot: 0/.', 'Special: .']
+    controls: ['Move: IJKL', 'Shoot: U/P', 'Special: O']
   }
 };
 
