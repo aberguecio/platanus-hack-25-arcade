@@ -905,86 +905,9 @@ class GameScene extends Phaser.Scene {
       if (e.isBoss) this.drawBoss(e);
       else this.drawEnemy(e);
 
-      // Draw elemental status effects
-      if (e.isFrozen) {
-        // Ice effect: transparent cyan diamonds
-        this.graphics.fillStyle(0x00ccff, 0.5);
-        this.graphics.save();
-        this.graphics.translateCanvas(e.x, e.y);
-
-        // Diamonds at different positions
-        for (let i = 0; i < 4; i++) {
-          const angle = (i * Math.PI / 2) + (time * 0.001);
-          const radius = 20 + Math.sin(time * 0.005 + i) * 5;
-          const rx = Math.cos(angle) * radius;
-          const ry = Math.sin(angle) * radius;
-
-          this.graphics.fillTriangle(rx, ry - 5, rx - 4, ry, rx, ry + 5);
-          this.graphics.fillTriangle(rx, ry - 5, rx + 4, ry, rx, ry + 5);
-        }
-
-        this.graphics.restore();
-      }
-
-      if (e.isBurning) {
-        // Fire effect: rising red particles
-        const burnPhase = time * 0.005;
-        this.graphics.fillStyle(0xff4400, 0.8);
-
-        for (let i = 0; i < 6; i++) {
-          const yOffset = ((burnPhase + i * 0.3) % 1.0) * -25;
-          const xOffset = Math.sin(burnPhase * 2 + i) * 8;
-          const size = 3 + Math.sin(burnPhase + i) * 2;
-          this.graphics.fillCircle(e.x + xOffset, e.y + 15 + yOffset, size);
-        }
-
-        this.graphics.fillStyle(0xff8800, 0.6);
-        for (let i = 0; i < 4; i++) {
-          const yOffset = ((burnPhase * 1.2 + i * 0.25) % 1.0) * -22;
-          const xOffset = Math.cos(burnPhase * 2 + i) * 6;
-          this.graphics.fillCircle(e.x + xOffset, e.y + 12 + yOffset, 2);
-        }
-      }
-
-      if (e.isElectrocuted) {
-        // Electric effect: yellow lightning
-        const sparkPhase = time * 0.02;
-        this.graphics.lineStyle(2, 0xffff00, 0.9);
-
-        // Lightning around enemy
-        for (let i = 0; i < 5; i++) {
-          const angle = (sparkPhase + i * 0.4) * Math.PI * 2;
-          const radius = 18 + Math.sin(sparkPhase * 3 + i) * 8;
-          const x1 = e.x + Math.cos(angle) * radius;
-          const y1 = e.y + Math.sin(angle) * radius;
-
-          // Zigzag lightning
-          const segments = 3;
-          let prevX = x1;
-          let prevY = y1;
-          for (let j = 1; j <= segments; j++) {
-            const targetAngle = angle + Math.PI + (Math.random() - 0.5) * 0.5;
-            const targetRadius = radius * (1 - j / segments);
-            const newX = e.x + Math.cos(targetAngle) * targetRadius;
-            const newY = e.y + Math.sin(targetAngle) * targetRadius;
-            this.graphics.lineBetween(prevX, prevY, newX, newY);
-            prevX = newX;
-            prevY = newY;
-          }
-        }
-
-        // Small sparks
-        this.graphics.fillStyle(0xffff00, 0.8);
-        for (let i = 0; i < 8; i++) {
-          const angle = (sparkPhase * 2 + i * 0.8) * Math.PI * 2;
-          const radius = 22;
-          this.graphics.fillCircle(
-            e.x + Math.cos(angle) * radius,
-            e.y + Math.sin(angle) * radius,
-            2
-          );
-        }
-      }
+      if (e.isFrozen) this.drawIceEffect(e, time);
+      if (e.isBurning) this.drawFireEffect(e, time);
+      if (e.isElectrocuted) this.drawElectricEffect(e, time);
     });
 
     // Draw powerups
@@ -1095,30 +1018,9 @@ class GameScene extends Phaser.Scene {
   }
 
   initPlayer(x, y, state) {
-    const p = this.physics.add.sprite(x, y, null);
-    p.setSize(30, 30);
-    p.setVisible(false);
-    p.health = state ? state.health : 5;
-    p.maxHealth = state ? state.maxHealth : 5;
-    p.baseSpeed = 200;
-    p.speed = state ? state.speed : 200;
-    p.angle = 0;
-    p.currentSpecialCooldown = 0;
-    p.invulnerable = false;
-    p.lastHitTime = 0;
-    p.specialReadyEffect = 0;
-    p.specialBullets = state ? state.specialBullets : 1;
-    p.specialCooldown = state ? state.specialCooldown : 2000;
-    p.normalShotCooldown = state ? state.normalShotCooldown : 300;
-    p.pierce = state ? state.pierce : 0;
-    p.damageMultiplier = state ? state.damageMultiplier : 1.0;
-    p.spreadBullets = state ? state.spreadBullets : 1;
-    p.homingStrength = state ? state.homingStrength : 0;
-    p.bounceCount = state ? state.bounceCount : 0;
-    p.hasBackShot = state ? state.hasBackShot : false;
-    p.iceDuration = state ? state.iceDuration : 0;
-    p.fireDuration = state ? state.fireDuration : 0;
-    p.electricDuration = state ? state.electricDuration : 0;
+    const p = this.physics.add.sprite(x, y, null).setSize(30, 30).setVisible(false);
+    const d = {health:5,maxHealth:5,baseSpeed:200,speed:200,angle:0,currentSpecialCooldown:0,invulnerable:false,lastHitTime:0,specialReadyEffect:0,specialBullets:1,specialCooldown:2000,normalShotCooldown:300,pierce:0,damageMultiplier:1.0,spreadBullets:1,homingStrength:0,bounceCount:0,hasBackShot:false,iceDuration:0,fireDuration:0,electricDuration:0};
+    for(const k in d)p[k]=state?state[k]??d[k]:d[k];
     return p;
   }
 
@@ -1257,6 +1159,58 @@ class GameScene extends Phaser.Scene {
         }
       }
     });
+  }
+
+  drawIceEffect(e, t) {
+    const g = this.graphics;
+    g.fillStyle(0x00ccff, 0.5);
+    g.save();
+    g.translateCanvas(e.x, e.y);
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI / 2) + (t * 0.001);
+      const r = 20 + Math.sin(t * 0.005 + i) * 5;
+      const rx = Math.cos(a) * r, ry = Math.sin(a) * r;
+      g.fillTriangle(rx, ry - 5, rx - 4, ry, rx, ry + 5);
+      g.fillTriangle(rx, ry - 5, rx + 4, ry, rx, ry + 5);
+    }
+    g.restore();
+  }
+
+  drawFireEffect(e, t) {
+    const g = this.graphics, p = t * 0.005;
+    g.fillStyle(0xff4400, 0.8);
+    for (let i = 0; i < 6; i++) {
+      const y = ((p + i * 0.3) % 1.0) * -25;
+      const x = Math.sin(p * 2 + i) * 8;
+      g.fillCircle(e.x + x, e.y + 15 + y, 3 + Math.sin(p + i) * 2);
+    }
+    g.fillStyle(0xff8800, 0.6);
+    for (let i = 0; i < 4; i++) {
+      const y = ((p * 1.2 + i * 0.25) % 1.0) * -22;
+      g.fillCircle(e.x + Math.cos(p * 2 + i) * 6, e.y + 12 + y, 2);
+    }
+  }
+
+  drawElectricEffect(e, t) {
+    const g = this.graphics, p = t * 0.02;
+    g.lineStyle(2, 0xffff00, 0.9);
+    for (let i = 0; i < 5; i++) {
+      const a = (p + i * 0.4) * Math.PI * 2;
+      const r = 18 + Math.sin(p * 3 + i) * 8;
+      let px = e.x + Math.cos(a) * r, py = e.y + Math.sin(a) * r;
+      for (let j = 1; j <= 3; j++) {
+        const ta = a + Math.PI + (Math.random() - 0.5) * 0.5;
+        const tr = r * (1 - j / 3);
+        const nx = e.x + Math.cos(ta) * tr, ny = e.y + Math.sin(ta) * tr;
+        g.lineBetween(px, py, nx, ny);
+        px = nx; py = ny;
+      }
+    }
+    g.fillStyle(0xffff00, 0.8);
+    for (let i = 0; i < 8; i++) {
+      const a = (p * 2 + i * 0.8) * Math.PI * 2;
+      g.fillCircle(e.x + Math.cos(a) * 22, e.y + Math.sin(a) * 22, 2);
+    }
   }
 
   // Helper: Create enemy bullet with auto-destroy
@@ -1614,85 +1568,57 @@ class GameScene extends Phaser.Scene {
     );
   }
 
-  shootEnemy(enemy, target) {
+  shootEnemy(e, t) {
     const s = 200;
-    if (enemy.type === 'triangle') {
-      this.shootAimed(enemy, target, s);
-      this.playSound(400, 0.1);
-    } else if (enemy.type === 'square') {
-      this.shootCircle(enemy, 4, 0, s);
-      this.playSound(400, 0.1);
-    } else if (enemy.type === 'pentagon') {
-      this.shootCircle(enemy, 5, 0, s);
-      this.playSound(450, 0.12);
-      this.time.delayedCall(250, () => { if (enemy.active) { this.shootCircle(enemy, 5, Math.PI / 5, s); this.playSound(450, 0.12); } });
-      this.time.delayedCall(500, () => { if (enemy.active) { this.shootCircle(enemy, 5, 0, s); this.playSound(450, 0.12); } });
-    } else if (enemy.type === 'hexagon') {
-      // Spiral: 2 arms, 4 bullets each, half rotation (π radians)
-      this.shootSpiral(enemy, 8, 2, Math.PI*2, 0, s, 3000, 200);
-      this.playSound(500, 0.1);
-    } else if (enemy.type === 'spinner') {
-      const a = Math.atan2(target.y - enemy.y, target.x - enemy.x);
-      for (let i = 0; i < 3; i++) {
-        const oa = a + (i - 1) * 0.15;
-        this.createEnemyBullet(enemy.x + Math.cos(oa) * 20, enemy.y + Math.sin(oa) * 20, Math.cos(oa) * s, Math.sin(oa) * s, 3000);
+    const p = {
+      triangle: () => { this.shootAimed(e, t, s); this.playSound(400, 0.1); },
+      square: () => { this.shootCircle(e, 4, 0, s); this.playSound(400, 0.1); },
+      pentagon: () => {
+        this.shootCircle(e, 5, 0, s); this.playSound(450, 0.12);
+        this.time.delayedCall(250, () => { if (e.active) { this.shootCircle(e, 5, Math.PI / 5, s); this.playSound(450, 0.12); } });
+        this.time.delayedCall(500, () => { if (e.active) { this.shootCircle(e, 5, 0, s); this.playSound(450, 0.12); } });
+      },
+      hexagon: () => { this.shootSpiral(e, 8, 2, Math.PI*2, 0, s, 3000, 200); this.playSound(500, 0.1); },
+      spinner: () => {
+        const a = Math.atan2(t.y - e.y, t.x - e.x);
+        for (let i = 0; i < 3; i++) {
+          const oa = a + (i - 1) * 0.15;
+          this.createEnemyBullet(e.x + Math.cos(oa) * 20, e.y + Math.sin(oa) * 20, Math.cos(oa) * s, Math.sin(oa) * s, 3000);
+        }
+        this.playSound(600, 0.1);
       }
-      this.playSound(600, 0.1);
-    }
+    };
+    if (p[e.type]) p[e.type]();
   }
 
-  drawEnemy(enemy) {
-    const color = ENEMY_TYPES[enemy.type].color;
-    const darkColor = this.darkenColor(color);
+  drawRot(x, y, a, fn) {
+    this.graphics.save();
+    this.graphics.translateCanvas(x, y);
+    this.graphics.rotateCanvas(a * Math.PI / 180);
+    fn();
+    this.graphics.restore();
+  }
 
-    if (enemy.type === 'triangle') {
-      // Base triangle (darker)
-      this.graphics.fillStyle(darkColor);
-      this.graphics.save();
-      this.graphics.translateCanvas(enemy.x, enemy.y);
-      this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
-      this.graphics.fillTriangle(15, 0, -10, -12, -10, 12);
-      this.graphics.restore();
-      // Original color triangle on top
-      this.graphics.fillStyle(color);
-      this.graphics.save();
-      this.graphics.translateCanvas(enemy.x - 2, enemy.y - 2);
-      this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
-      this.graphics.fillTriangle(12, 0, -8, -10, -8, 10);
-      this.graphics.restore();
-    } else if (enemy.type === 'square') {
-      this.graphics.fillStyle(darkColor);
-      this.graphics.fillRect(enemy.x - 15, enemy.y - 15, 30, 30);
-      this.graphics.fillStyle(color);
-      this.graphics.fillRect(enemy.x - 13, enemy.y - 13, 24, 24);
-    } else if (enemy.type === 'pentagon') {
-      this.graphics.fillStyle(darkColor);
-      this.drawPolygon(enemy.x, enemy.y, 5, 17, null, -Math.PI / 2);
-      this.graphics.fillStyle(color);
-      this.drawPolygon(enemy.x - 1, enemy.y - 1, 5, 14, null, -Math.PI / 2);
-    } else if (enemy.type === 'hexagon') {
-      this.graphics.fillStyle(darkColor);
-      this.drawPolygon(enemy.x, enemy.y, 6, 19, null, -Math.PI / 2);
-      this.graphics.fillStyle(color);
-      this.drawPolygon(enemy.x - 1, enemy.y - 1, 6, 15, null, -Math.PI / 2);
-    } else if (enemy.type === 'spinner') {
-      // Base spinner (darker)
-      this.graphics.fillStyle(darkColor);
-      this.graphics.save();
-      this.graphics.translateCanvas(enemy.x, enemy.y);
-      this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
-      this.graphics.fillTriangle(0, -15, -10, 5, 10, 5);
-      this.graphics.fillTriangle(0, 15, -10, -5, 10, -5);
-      this.graphics.restore();
-      // Original color spinner on top
-      this.graphics.fillStyle(color);
-      this.graphics.save();
-      this.graphics.translateCanvas(enemy.x - 2, enemy.y - 2);
-      this.graphics.rotateCanvas(enemy.angle * Math.PI / 180);
-      this.graphics.fillTriangle(0, -12, -8, 4, 8, 4);
-      this.graphics.fillTriangle(0, 12, -8, -4, 8, -4);
-      this.graphics.restore();
-    }
+  drawEnemy(e) {
+    const g = this.graphics, c = ENEMY_TYPES[e.type].color, d = this.darkenColor(c);
+    const r = {
+      triangle: () => {
+        g.fillStyle(d);
+        this.drawRot(e.x, e.y, e.angle, () => g.fillTriangle(15, 0, -10, -12, -10, 12));
+        g.fillStyle(c);
+        this.drawRot(e.x - 2, e.y - 2, e.angle, () => g.fillTriangle(12, 0, -8, -10, -8, 10));
+      },
+      square: () => { g.fillStyle(d); g.fillRect(e.x - 15, e.y - 15, 30, 30); g.fillStyle(c); g.fillRect(e.x - 13, e.y - 13, 24, 24); },
+      pentagon: () => { g.fillStyle(d); this.drawPolygon(e.x, e.y, 5, 17, null, -Math.PI / 2); g.fillStyle(c); this.drawPolygon(e.x - 1, e.y - 1, 5, 14, null, -Math.PI / 2); },
+      hexagon: () => { g.fillStyle(d); this.drawPolygon(e.x, e.y, 6, 19, null, -Math.PI / 2); g.fillStyle(c); this.drawPolygon(e.x - 1, e.y - 1, 6, 15, null, -Math.PI / 2); },
+      spinner: () => {
+        g.fillStyle(d);
+        this.drawRot(e.x, e.y, e.angle, () => { g.fillTriangle(0, -15, -10, 5, 10, 5); g.fillTriangle(0, 15, -10, -5, 10, -5); });
+        g.fillStyle(c);
+        this.drawRot(e.x - 2, e.y - 2, e.angle, () => { g.fillTriangle(0, -12, -8, 4, 8, 4); g.fillTriangle(0, 12, -8, -4, 8, -4); });
+      }
+    };
+    if (r[e.type]) r[e.type]();
   }
 
   handleBulletWallCollision(bullet, wall) {
@@ -2031,50 +1957,26 @@ class GameScene extends Phaser.Scene {
     // Only revive in 2P mode
     if (this.numPlayers !== 2) return false;
 
-    let revivedAny = false;
-
-    // Revive P1 if dead
-    if (!this.p1Alive) {
-      this.p1Alive = true;
-      this.p1.health = this.p1.maxHealth;
-      this.p1.x = 250;
-      this.p1.y = 300;
-      this.p1.setVelocity(0, 0);
-
-      // Revival effects
-      this.createExplosionEffect(this.p1.x, this.p1.y, 0x00ff00, 15);
-      this.playSound(800, 0.25);
-
-      revivedAny = true;
+    const revive = (p, x, alive) => {
+      if (!alive) {
+        p.health = p.maxHealth;
+        p.x = x; p.y = 300;
+        p.setVelocity(0, 0);
+        this.createExplosionEffect(x, 300, 0x00ff00, 15);
+        this.playSound(800, 0.25);
+        return true;
+      }
+      return false;
+    };
+    const r1 = revive(this.p1, 250, this.p1Alive);
+    const r2 = revive(this.p2, 550, this.p2Alive);
+    if (r1) this.p1Alive = true;
+    if (r2) this.p2Alive = true;
+    if (r1 || r2) {
+      const m = this.add.text(400, 200, 'PLAYER REVIVED!', {fontSize: '36px', fontFamily: 'Arial', color: '#0f0', stroke: '#000', strokeThickness: 6}).setOrigin(0.5);
+      this.time.delayedCall(2000, () => m.destroy());
     }
-
-    // Revive P2 if dead
-    if (!this.p2Alive) {
-      this.p2Alive = true;
-      this.p2.health = this.p2.maxHealth;
-      this.p2.x = 550;
-      this.p2.y = 300;
-      this.p2.setVelocity(0, 0);
-
-      // Revival effects
-      this.createExplosionEffect(this.p2.x, this.p2.y, 0x00ff00, 15);
-      this.playSound(800, 0.25);
-
-      revivedAny = true;
-    }
-
-    // Show revival message
-    if (revivedAny) {
-      const msg = this.add.text(400, 200, 'PLAYER REVIVED!', {
-        fontSize: '36px',
-        fontFamily: 'Arial',
-        color: '#0f0',
-        stroke: '#000',
-        strokeThickness: 6
-      }).setOrigin(0.5);
-      this.time.delayedCall(2000, () => msg.destroy());
-    }
-    return revivedAny;
+    return r1 || r2;
   }
 
   togglePause() {
@@ -2961,96 +2863,23 @@ class GameScene extends Phaser.Scene {
     let message = '';
     const color = '#' + powerupData.color.toString(16).padStart(6, '0');
 
-    // Apply effects by type
-    switch(type) {
-      case 'extraBullet':
-        player.specialBullets++;
-        message = `${powerupData.description} (${player.specialBullets})`;
-        break;
-
-      case 'speedBoost':
-        player.speed += player.baseSpeed * 0.25; // +25% velocidad
-        message = powerupData.description;
-        break;
-
-      case 'fireRate':
-        player.normalShotCooldown = Math.max(50, player.normalShotCooldown * 0.75); // -25% cooldown
-        player.specialCooldown = Math.max(300, player.specialCooldown * 0.75); // -25% cooldown for special
-        message = `${powerupData.description}`;
-        break;
-
-      case 'pierceShot':
-        player.pierce++;
-        message = `${powerupData.description} (${player.pierce})`;
-        break;
-
-      case 'moreDamage':
-        player.damageMultiplier += 0.25; // +25% damage
-        message = `${powerupData.description} (x${player.damageMultiplier.toFixed(2)})`;
-        break;
-
-      case 'backShot':
-        player.hasBackShot = true;
-        message = powerupData.description;
-        break;
-
-      case 'spreadShot':
-        player.spreadBullets += 2; // +2 balas normales
-        message = `${powerupData.description} (${player.spreadBullets})`;
-        break;
-
-      case 'homingBullets':
-        player.homingStrength = Math.min(1.0, player.homingStrength + 0.15); // Incrementa homing
-        message = `${powerupData.description} (${Math.floor(player.homingStrength * 100)}%)`;
-        break;
-
-      case 'bounce':
-        player.bounceCount++;
-        message = `${powerupData.description} (${player.bounceCount})`;
-        break;
-
-      case 'iceBullets':
-        if (player.iceDuration === 0) {
-          player.iceDuration = 8000; // 8s base
-        } else {
-          player.iceDuration += 4000; // +4s por cada powerup adicional
-        }
-        message = `${powerupData.description} (${player.iceDuration / 1000}s)`;
-        break;
-
-      case 'fireBullets':
-        if (player.fireDuration === 0) {
-          player.fireDuration = 5000; // 5s base
-        } else {
-          player.fireDuration += 3000; // +3s por cada powerup adicional
-        }
-        message = `${powerupData.description} (${player.fireDuration / 1000}s)`;
-        break;
-
-      case 'electricBullets':
-        if (player.electricDuration === 0) {
-          player.electricDuration = 3000; // 2s base
-        } else {
-          player.electricDuration += 2000; // +1s por cada powerup adicional
-        }
-        message = `${powerupData.description} (${player.electricDuration / 1000}s)`;
-        break;
-
-      case 'heart':
-        if (player.health < player.maxHealth) {
-          player.health++;
-          message = `+1 HEART! (${player.health}/${player.maxHealth})`;
-        } else {
-          message = 'Already at max health!';
-        }
-        break;
-
-      case 'maxHeart':
-        player.maxHealth++;
-        player.health++;
-        message = `MAX HEART UP! (${player.health}/${player.maxHealth})`;
-        break;
-    }
+    const h = {
+      extraBullet: p => { p.specialBullets++; return `${powerupData.description} (${p.specialBullets})`; },
+      speedBoost: p => { p.speed += p.baseSpeed * 0.25; return powerupData.description; },
+      fireRate: p => { p.normalShotCooldown = Math.max(50, p.normalShotCooldown * 0.75); p.specialCooldown = Math.max(300, p.specialCooldown * 0.75); return powerupData.description; },
+      pierceShot: p => { p.pierce++; return `${powerupData.description} (${p.pierce})`; },
+      moreDamage: p => { p.damageMultiplier += 0.25; return `${powerupData.description} (x${p.damageMultiplier.toFixed(2)})`; },
+      backShot: p => { p.hasBackShot = true; return powerupData.description; },
+      spreadShot: p => { p.spreadBullets += 2; return `${powerupData.description} (${p.spreadBullets})`; },
+      homingBullets: p => { p.homingStrength = Math.min(1.0, p.homingStrength + 0.15); return `${powerupData.description} (${Math.floor(p.homingStrength * 100)}%)`; },
+      bounce: p => { p.bounceCount++; return `${powerupData.description} (${p.bounceCount})`; },
+      iceBullets: p => { p.iceDuration = p.iceDuration === 0 ? 8000 : p.iceDuration + 4000; return `${powerupData.description} (${p.iceDuration / 1000}s)`; },
+      fireBullets: p => { p.fireDuration = p.fireDuration === 0 ? 5000 : p.fireDuration + 3000; return `${powerupData.description} (${p.fireDuration / 1000}s)`; },
+      electricBullets: p => { p.electricDuration = p.electricDuration === 0 ? 3000 : p.electricDuration + 2000; return `${powerupData.description} (${p.electricDuration / 1000}s)`; },
+      heart: p => { if (p.health < p.maxHealth) { p.health++; return `+1 HEART! (${p.health}/${p.maxHealth})`; } return 'Already at max health!'; },
+      maxHeart: p => { p.maxHealth++; p.health++; return `MAX HEART UP! (${p.health}/${p.maxHealth})`; }
+    };
+    message = h[type] ? h[type](player) : '';
 
     // Mostrar mensaje
     const msg = this.add.text(400, 350, message, {
