@@ -326,7 +326,7 @@ const ENEMY_TYPES = {
 const BOSS_TYPES = {
   pattern: {health: 500, speed: 30, shootDelay: 1500, size: 60, name: 'Shooting Star', color: 0xffff00},
   twins: {health: 1200, speed: 40, shootDelay: 2000, size: 70, name: 'Twins Shifter´s', color: [0xff00ff, 0x00ffff]},
-  laser: {health: 2000, speed: 250, shootDelay: 800, size: 40, name: 'Ultimate Laser', color: 0x00ffaa}
+  laser: {health: 2000, speed: 50, shootDelay: 800, size: 40, name: 'Ultimate Laser', color: 0x00ffaa}
 };
 
 // POWERUP TYPE DEFINITIONS
@@ -1112,6 +1112,18 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  // Helper: Move entity towards target (or away if reverse=true)
+  moveTowards(entity, targetX, targetY, speed, reverse = false) {
+    const dx = targetX - entity.x;
+    const dy = targetY - entity.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > 0) {
+      const dir = reverse ? -1 : 1;
+      entity.setVelocity(dx/dist * speed * dir, dy/dist * speed * dir);
+    }
+    return dist;
+  }
+
   // Helper: Update homing bullets
   updateHomingBullets(bulletGroup) {
     bulletGroup.children.entries.forEach(b => {
@@ -1496,8 +1508,8 @@ class GameScene extends Phaser.Scene {
     // Move to nearest player
     const target = this.getNearestPlayer(enemy.x, enemy.y);
 
-    let dx = target.x - enemy.x;
-    let dy = target.y - enemy.y;
+    const dx = target.x - enemy.x;
+    const dy = target.y - enemy.y;
     const dist = Math.sqrt(dx*dx + dy*dy);
 
     // Separation force: push away from nearby enemies
@@ -2453,13 +2465,11 @@ class GameScene extends Phaser.Scene {
   }
 
   updateBoss(boss, time, delta) {
-    // Process elemental effects
     const effects = this.processElementalEffects(boss, time, (b) => {
       const deathPosition = { x: b.x, y: b.y };
       this.handleBossDeath(b, deathPosition);
     });
-    if (!effects) return; // Entity paralyzed or dead
-
+    if (!effects) return;
     const { speedMultiplier, shootDelayMultiplier } = effects;
 
     if (boss.bossType === 'pattern') {
@@ -2525,13 +2535,10 @@ class GameScene extends Phaser.Scene {
       const target = this.getNearestPlayer(boss.x, boss.y);
 
       // Slow movement to player
+      const slowSpeed = boss.speed * speedMultiplier;
+      this.moveTowards(boss, target.x, target.y, slowSpeed);
       const dx = target.x - boss.x;
       const dy = target.y - boss.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      const slowSpeed = 40 * speedMultiplier; // Muy lento
-      if (dist > 0) {
-        boss.setVelocity(dx/dist * slowSpeed, dy/dist * slowSpeed);
-      }
 
       // Ángulo siempre apuntando al jugador
       boss.angle = Math.atan2(dy, dx) * 180 / Math.PI;
@@ -2574,58 +2581,39 @@ class GameScene extends Phaser.Scene {
     } else if (boss.bossType === 'twins' && !boss.hasChildren) {
       // BOSS 3: TWO TWINS alternating
 
-      // Crear mellizos si no existen
       boss.hasChildren = true;
-
-      // Create twin 1
-      const twin1 = this.enemies.create(300, 200, null);
-      twin1.setSize(35, 35);
-      twin1.setVisible(false);
-      twin1.isBoss = true;
-      twin1.bossType = 'twin1';
-      twin1.health = Math.ceil(150 * this.getSpawnDifficulty());
-      twin1.maxHealth = Math.ceil(150 * this.getSpawnDifficulty());
-      twin1.speed = 120; // Faster
-      twin1.spawnTime = this.time.now;
-      twin1.lastShot = 0;
-      twin1.phaseStartTime = time;
-      twin1.isAttacking = true; // Twin1 empieza atacando
-
-      // Create twin 2
-      const twin2 = this.enemies.create(500, 400, null);
-      twin2.setSize(35, 35);
-      twin2.setVisible(false);
-      twin2.isBoss = true;
-      twin2.bossType = 'twin2';
-      twin2.health = Math.ceil(150 * this.getSpawnDifficulty());
-      twin2.maxHealth = Math.ceil(150 * this.getSpawnDifficulty());
-      twin2.speed = 120; // Faster
-      twin2.spawnTime = this.time.now;
-      twin2.lastShot = 0;
-      twin2.phaseStartTime = time;
-      twin2.isAttacking = false; // Twin2 empieza esperando
-
-      // Guardar referencias
-      boss.twin1 = twin1;
-      boss.twin2 = twin2;
-      twin1.sibling = twin2;
-      twin2.sibling = twin1;
-
-      // Destruir el boss original (ya no se usa)
+      const hp = Math.ceil(150 * this.getSpawnDifficulty());
+      const mkTwin = (x, y, type, atk) => {
+        const t = this.enemies.create(x, y, null);
+        t.setSize(35, 35).setVisible(false);
+        t.isBoss = true;
+        t.bossType = type;
+        t.health = t.maxHealth = hp;
+        t.speed = 120;
+        t.spawnTime = this.time.now;
+        t.lastShot = 0;
+        t.phaseStartTime = time;
+        t.isAttacking = atk;
+        return t;
+      };
+      const t1 = mkTwin(300, 200, 'twin1', true);
+      const t2 = mkTwin(500, 400, 'twin2', false);
+      boss.twin1 = t1;
+      boss.twin2 = t2;
+      t1.sibling = t2;
+      t2.sibling = t1;
       boss.destroy();
     } else if (boss.bossType === 'random') {
       // RANDOM BOSS: Star with multiple patterns
       const target = this.getNearestPlayer(boss.x, boss.y);
-      const dx = target.x - boss.x;
-      const dy = target.y - boss.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
+      const moveSpeed = boss.speed * speedMultiplier;
+      const dist = this.moveTowards(boss, target.x, target.y, moveSpeed);
 
       // Circular movement
-      const moveSpeed = boss.speed * speedMultiplier;
       if (dist > 200) {
-        boss.setVelocity(dx/dist * moveSpeed, dy/dist * moveSpeed);
+        // Already moving towards player
       } else if (dist < 150) {
-        boss.setVelocity(-dx/dist * moveSpeed, -dy/dist * moveSpeed);
+        this.moveTowards(boss, target.x, target.y, moveSpeed, true);
       } else {
         const angle = time * 0.001;
         boss.setVelocity(Math.cos(angle) * moveSpeed, Math.sin(angle) * moveSpeed);
@@ -2682,56 +2670,45 @@ class GameScene extends Phaser.Scene {
   }
 
   updateTwin(twin, time) {
-    // Apply elemental effects (freeze, burn, electric stun) to twins as well
     const effects = this.processElementalEffects(twin, time, (t) => {
       const deathPosition = { x: t.x, y: t.y };
       this.handleBossDeath(t, deathPosition);
     });
-    if (!effects) return; // Paralyzed or handled by elemental effect
-    // Combine passed multipliers with elemental modifiers
+    if (!effects) return;
     const { speedMultiplier, shootDelayMultiplier } = effects;
-    // Find nearest player
     const target = this.getNearestPlayer(twin.x, twin.y);
 
-    // Twin repulsion
     let repulsionX = 0;
     let repulsionY = 0;
     if (twin.sibling && twin.sibling.active) {
       const siblingDx = twin.sibling.x - twin.x;
       const siblingDy = twin.sibling.y - twin.y;
       const siblingDist = Math.sqrt(siblingDx*siblingDx + siblingDy*siblingDy);
-
-      // Apply repulsion if too close
       if (siblingDist < 100 && siblingDist > 0) {
-        const repulsionStrength = (100 - siblingDist) * 2; // Closer = stronger repulsion
+        const repulsionStrength = (100 - siblingDist) * 2;
         repulsionX = -(siblingDx / siblingDist) * repulsionStrength;
         repulsionY = -(siblingDy / siblingDist) * repulsionStrength;
       }
     }
 
-    // Fast erratic movement
-    const dx = target.x - twin.x;
-    const dy = target.y - twin.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
     const effectiveSpeed = twin.speed * speedMultiplier;
+    const dist = this.moveTowards(twin, target.x, target.y, effectiveSpeed);
 
-    let velocityX = 0;
-    let velocityY = 0;
-
+    let velocityX = twin.body.velocity.x;
+    let velocityY = twin.body.velocity.y;
     if (dist > 150) {
-      velocityX = (dx/dist * effectiveSpeed);
-      velocityY = (dy/dist * effectiveSpeed);
+      // Already moving towards player
     } else if (dist < 100) {
-      velocityX = (-dx/dist * effectiveSpeed);
-      velocityY = (-dy/dist * effectiveSpeed);
+      // Move away from player
+      this.moveTowards(twin, target.x, target.y, effectiveSpeed, true);
+      velocityX = twin.body.velocity.x;
+      velocityY = twin.body.velocity.y;
     } else {
-      // Circle around player
       const angle = time * 0.002;
       velocityX = Math.cos(angle) * effectiveSpeed;
       velocityY = Math.sin(angle) * effectiveSpeed;
     }
 
-    // Apply velocity + repulsion
     twin.setVelocity(velocityX + repulsionX, velocityY + repulsionY);
 
     // Wait 1s after spawn
@@ -2992,7 +2969,7 @@ class GameScene extends Phaser.Scene {
       this.graphics.save();
       this.graphics.translateCanvas(boss.x, boss.y);
       this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-      this.drawPolygon(0, 0, boss.starPoints, boss.maxHealth / 20, boss.maxHealth / 40, 0);
+      this.drawPolygon(0, 0, boss.starPoints, Math.min(boss.maxHealth / 20, 50), Math.min(boss.maxHealth / 40, 30), 0);
       this.graphics.restore();
     } else {
       this.graphics.fillStyle(BOSS_TYPES[boss.bossType].color);
@@ -3002,7 +2979,7 @@ class GameScene extends Phaser.Scene {
         this.graphics.save();
         this.graphics.translateCanvas(boss.x, boss.y);
         this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-        this.drawPolygon(0, 0, 6, 45, 20, 0);
+        this.drawPolygon(0, 0, 6, BOSS_TYPES[boss.bossType].size, 20, 0);
         this.graphics.restore();
       }
     }
