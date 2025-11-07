@@ -269,7 +269,7 @@ class MenuScene extends Phaser.Scene {
 
   startGame() {
     const players = this.selectedOption === 0 ? 1 : 2;
-    this.scene.start('GameScene', { players });
+    this.scene.start('StoryScene', { players });
   }
 }
 
@@ -3050,9 +3050,9 @@ class GameScene extends Phaser.Scene {
     const p1State = this.savePlayerState(this.p1);
     const p2State = this.numPlayers === 2 ? this.savePlayerState(this.p2) : null;
 
-    // Restart scene
+    // Go to story scene then game scene
     this.time.delayedCall(500, () => {
-      this.scene.restart({
+      this.scene.start('StoryScene', {
         players: this.numPlayers,
         level: this.level,
         wave: this.wave,
@@ -3064,6 +3064,60 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+}
+
+// STORY SCENE
+class StoryScene extends Phaser.Scene {
+  constructor() {
+    super('StoryScene');
+  }
+
+  init(data) {
+    this.nextSceneData = data;
+  }
+
+  create() {
+    const panels = [
+      'In the world of polygons, status was measured\nby the number of sides.',
+      'You, a circle, were nothing,\na servant among shapes.',
+      'Until you proved, with pure math,\nthat you have infinite sides.',
+      'The world trembled...\nso they tried to silence you.'
+    ];
+
+    const level = this.nextSceneData.level || 1;
+    const panelIndex = level - 1;
+
+    // Skip if no panel for this level
+    if (panelIndex >= panels.length) {
+      this.scene.start('GameScene', this.nextSceneData);
+      return;
+    }
+
+    const text = this.add.text(400, 300, panels[panelIndex], {
+      fontSize: '28px',
+      fill: '#fff',
+      align: 'center',
+      wordWrap: { width: 700 }
+    }).setOrigin(0.5).setAlpha(0);
+
+    this.tweens.add({
+      targets: text,
+      alpha: 1,
+      duration: 500,
+      onComplete: () => {
+        this.time.delayedCall(2500, () => {
+          this.tweens.add({
+            targets: text,
+            alpha: 0,
+            duration: 500,
+            onComplete: () => {
+              this.scene.start('GameScene', this.nextSceneData);
+            }
+          });
+        });
+      }
+    });
+  }
 }
 
 // GAME CONFIG
@@ -3079,7 +3133,7 @@ const config = {
       debug: false
     }
   },
-  scene: [MenuScene, GameScene]
+  scene: [MenuScene, StoryScene, GameScene]
 };
 
 const game = new Phaser.Game(config);
