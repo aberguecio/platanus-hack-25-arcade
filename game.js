@@ -324,33 +324,9 @@ const ENEMY_TYPES = {
 
 // BOSS TYPE DEFINITIONS
 const BOSS_TYPES = {
-  pattern: {
-    health: 500,
-    speed: 30,
-    shootDelay: 1500,
-    color: 0xffff00,
-    points: 500,
-    size: 60,
-    name: 'Shooting Star'
-  },
-  twins: {
-    health: 1200,
-    speed: 40,
-    shootDelay: 2000,
-    color: 0xff0088,
-    points: 1000,
-    size: 70,
-    name: 'Twins Shifter´s'
-  },
-  laser: {
-    health: 2000,
-    speed: 20,
-    shootDelay: 800,
-    color: 0x00ffaa,
-    points: 2000,
-    size: 80,
-    name: 'Ultimate Laser'
-  }
+  pattern: {health: 500, speed: 30, shootDelay: 1500, size: 60, name: 'Shooting Star', color: 0xffff00},
+  twins: {health: 1200, speed: 40, shootDelay: 2000, size: 70, name: 'Twins Shifter´s', color: [0xff00ff, 0x00ffff]},
+  laser: {health: 2000, speed: 250, shootDelay: 800, size: 40, name: 'Ultimate Laser', color: 0x00ffaa}
 };
 
 // POWERUP TYPE DEFINITIONS
@@ -731,7 +707,8 @@ class GameScene extends Phaser.Scene {
       };
       this.input.keyboard.on('keydown-ONE', () => this.debugSkipToWave(5));
       this.input.keyboard.on('keydown-TWO', () => this.debugSkipToWave(10));
-      this.input.keyboard.on('keydown-THREE', () => this.debugSkipToWave(20));
+      this.input.keyboard.on('keydown-THREE', () => this.debugSkipToWave(15));
+      this.input.keyboard.on('keydown-FOUR', () => this.debugSkipToWave(20));
       this.input.keyboard.on('keydown-NINE', () => this.debugKillAllEnemies());
       this.input.keyboard.on('keydown-ZERO', () => this.trySpawnPowerup(true, { x: this.p1.x, y: this.p1.y }));
     }
@@ -1892,13 +1869,15 @@ class GameScene extends Phaser.Scene {
   handleBossDeath(boss, deathPosition) {
     // Centralized boss death handling
     this.lastEnemyPosition = deathPosition;
+    const points = Math.max(500, ((this.wave / 5) * 500));
 
     // Handle twins special case
     if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
+      const twinPts = points / 2;
       const otherTwin = boss.sibling;
       if (otherTwin && otherTwin.active && otherTwin.health > 0) {
         // Other twin still alive - partial reward only
-        this.score += 250;
+        this.score += twinPts;
         this.scoreText.setText('Score: ' + this.score);
         this.playSound(600, 0.3);
         // Ensure the surviving twin keeps attacking immediately
@@ -1912,7 +1891,7 @@ class GameScene extends Phaser.Scene {
         return; // Don't end boss fight yet
       } else {
         // Both twins dead
-        this.score += 250;
+        this.score += twinPts;
         this.scoreText.setText('Score: ' + this.score);
 
         // Track boss defeat
@@ -1922,14 +1901,12 @@ class GameScene extends Phaser.Scene {
       }
     } else {
       // Normal or random boss
-      let points, bossName;
+      let bossName;
       if (boss.bossType === 'random') {
         // Random boss uses stored points
-        points = boss.points || (500 + ((this.wave - 20) / 10) * 500);
         bossName = boss.starPoints + '-STAR BOSS';
       } else {
         const typeData = BOSS_TYPES[boss.bossType];
-        points = typeData.points;
         bossName = typeData.name;
       }
 
@@ -3007,10 +2984,10 @@ class GameScene extends Phaser.Scene {
 
   drawBoss(boss) {
     if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
-      this.graphics.fillStyle(boss.bossType === 'twin1' ? 0xff00ff : 0x00ffff);
+      const c = BOSS_TYPES.twins.color;
+      this.graphics.fillStyle(boss.bossType === 'twin1' ? c[0] : c[1]);
       this.drawPolygon(boss.x, boss.y, 5, 30, 12, -Math.PI / 2);
     } else if (boss.bossType === 'random') {
-      // Draw random star boss
       this.graphics.fillStyle(Math.floor(boss.health / boss.maxHealth * 0xffffff));
       this.graphics.save();
       this.graphics.translateCanvas(boss.x, boss.y);
