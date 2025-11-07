@@ -2791,8 +2791,13 @@ class GameScene extends Phaser.Scene {
         }
       } else {
         // No atacando, esperando 5 segundos
-        if (phaseTime >= 5000) {
-          // No hace nada, espera que el hermano termine
+        if (phaseTime >= 2000) {
+          // Si el hermano murió, este twin debe volver a atacar
+          if (!twin.sibling || !twin.sibling.active) {
+            twin.isAttacking = true;
+            twin.spiralFired = false;
+            twin.phaseStartTime = time;
+          }
         }
       }
     }
