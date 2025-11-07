@@ -75,7 +75,7 @@ class MenuScene extends Phaser.Scene {
     // Title with glow effect
     this.titleText = this.add.text(400, 120, 'OBSCURANTISM', {
       fontSize: '64px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#ff0000',
       stroke: '#000',
       strokeThickness: 8
@@ -84,7 +84,7 @@ class MenuScene extends Phaser.Scene {
     // Subtitle
     this.add.text(400, 180, 'Wave Survival Arena', {
       fontSize: '20px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#666',
       stroke: '#000',
       strokeThickness: 4
@@ -105,14 +105,14 @@ class MenuScene extends Phaser.Scene {
     if (scores.length > 0) {
       this.add.text(400, 380, 'HIGH SCORES', {
         fontSize: '20px',
-        fontFamily: 'Arial',
+        fontFamily: 'Consolas',
         color: '#ffcc00'
       }).setOrigin(0.5);
 
       scores.forEach((score, i) => {
         this.add.text(400, 410 + i * 25, `${i + 1}. ${score.name} - ${score.score}`, {
           fontSize: '16px',
-          fontFamily: 'Arial',
+          fontFamily: 'Consolas',
           color: i === 0 ? '#ffcc00' : '#cc9900'
         }).setOrigin(0.5);
       });
@@ -121,13 +121,13 @@ class MenuScene extends Phaser.Scene {
     // Menu options text
     this.text1 = this.add.text(400, 240, '1 PLAYER', {
       fontSize: '36px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#00ff00'
     }).setOrigin(0.5);
 
     this.text2 = this.add.text(400, 310, '2 PLAYERS', {
       fontSize: '36px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#0099ff'
     }).setOrigin(0.5);
 
@@ -139,7 +139,7 @@ class MenuScene extends Phaser.Scene {
     // Instructions for menu navigation
     this.add.text(400, 560, 'Press W/S to select, Enter to start', {
       fontSize: '16px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#888'
     }).setOrigin(0.5);
 
@@ -433,7 +433,7 @@ function renderPlayerControls(scene, x, startY, playerConfig, options = {}) {
   // Title style
   const titleStyle = {
     fontSize: titleSize,
-    fontFamily: 'Arial',
+    fontFamily: 'Consolas',
     color: playerConfig.color
   };
   if (useStroke) {
@@ -449,7 +449,7 @@ function renderPlayerControls(scene, x, startY, playerConfig, options = {}) {
   playerConfig.controls.forEach(control => {
     const controlText = scene.add.text(x, y, control, {
       fontSize: controlSize,
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#aaa'
     }).setOrigin(0.5);
 
@@ -716,27 +716,27 @@ class GameScene extends Phaser.Scene {
     // UI
     this.hpText1 = this.add.text(20, 20, 'P1: 100 HP', {
       fontSize: '20px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#0f0'
     });
 
     if (this.numPlayers === 2) {
       this.hpText2 = this.add.text(780, 20, 'P2: 100 HP', {
         fontSize: '20px',
-        fontFamily: 'Arial',
+        fontFamily: 'Consolas',
         color: '#09f'
       }).setOrigin(1, 0);
     }
 
     this.waveText = this.add.text(400, 20, 'Wave: 1', {
       fontSize: '20px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#ff0'
     }).setOrigin(0.5, 0);
 
     this.scoreText = this.add.text(400, 45, 'Score: 0', {
       fontSize: '16px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#fff'
     }).setOrigin(0.5, 0);
 
@@ -749,7 +749,7 @@ class GameScene extends Phaser.Scene {
 
       this.add.text(400, 580, debugText, {
         fontSize: '12px',
-        fontFamily: 'Arial',
+        fontFamily: 'Consolas',
         color: '#f0f'
       }).setOrigin(0.5, 1);
     }
@@ -1862,7 +1862,7 @@ class GameScene extends Phaser.Scene {
     // Show wave message
     const waveMsg = this.add.text(400, 100, 'WAVE ' + this.wave, {
       fontSize: '48px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#0f0',
       stroke: '#000',
       strokeThickness: 6
@@ -1953,7 +1953,7 @@ class GameScene extends Phaser.Scene {
     // Show message
     this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
       fontSize: '32px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#0ff',
       align: 'center'
     }).setOrigin(0.5);
@@ -1980,7 +1980,7 @@ class GameScene extends Phaser.Scene {
     if (r1) this.p1Alive = true;
     if (r2) this.p2Alive = true;
     if (r1 || r2) {
-      const m = this.add.text(400, 200, 'PLAYER REVIVED!', {fontSize: '36px', fontFamily: 'Arial', color: '#0f0', stroke: '#000', strokeThickness: 6}).setOrigin(0.5);
+      const m = this.add.text(400, 200, 'PLAYER REVIVED!', {fontSize: '36px', fontFamily: 'Consolas', color: '#0f0', stroke: '#000', strokeThickness: 6}).setOrigin(0.5);
       this.time.delayedCall(2000, () => m.destroy());
     }
     return r1 || r2;
@@ -2023,7 +2023,7 @@ class GameScene extends Phaser.Scene {
       // Title
       this.pauseTexts.push(this.add.text(400, 100, 'PAUSED', {
         fontSize: '48px',
-        fontFamily: 'Arial',
+        fontFamily: 'Consolas',
         color: '#ffff00',
         stroke: '#000',
         strokeThickness: 6
@@ -2032,7 +2032,7 @@ class GameScene extends Phaser.Scene {
       // Controls title
       this.pauseTexts.push(this.add.text(400, 180, 'CONTROLS', {
         fontSize: '28px',
-        fontFamily: 'Arial',
+        fontFamily: 'Consolas',
         color: '#00ff00'
       }).setOrigin(0.5));
 
@@ -2056,7 +2056,7 @@ class GameScene extends Phaser.Scene {
       // Resume instruction
       this.pauseTexts.push(this.add.text(400, 520, 'Press ENTER to resume', {
         fontSize: '18px',
-        fontFamily: 'Arial',
+        fontFamily: 'Consolas',
         color: '#ffff00'
       }).setOrigin(0.5));
     }
@@ -2086,24 +2086,24 @@ class GameScene extends Phaser.Scene {
     overlay.fillRect(0, 0, 800, 600);
 
     // Title
-    this.add.text(400, 60, 'GAME OVER', {
+    this.add.text(400, 75, 'GAME OVER', {
       fontSize: '56px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#f00',
       stroke: '#000',
       strokeThickness: 8
     }).setOrigin(0.5);
 
     // Main stats
-    this.add.text(400, 130, 'Wave Reached: ' + this.stats.highestWave, {
+    this.add.text(400, 140, 'Wave Reached: ' + this.stats.highestWave, {
       fontSize: '28px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#ff0'
     }).setOrigin(0.5);
 
-    this.add.text(400, 165, 'Final Score: ' + this.score, {
+    this.add.text(400, 170, 'Final Score: ' + this.score, {
       fontSize: '24px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#fff'
     }).setOrigin(0.5);
 
@@ -2136,13 +2136,13 @@ class GameScene extends Phaser.Scene {
       const nm = n.map((c,i)=>i===p ? `[${c}]` : c).join('');
       this.add.text(400,430,'NEW HIGH SCORE!',{
         fontSize:'32px',
-        fontFamily:'Arial',
+        fontFamily:'Consolas',
         color:'#ece000ff',
         align: 'center'
       }).setOrigin(0.5);
       const tn=this.add.text(400,470,'NAME: '+nm,{
         fontSize:'32px',
-        fontFamily:'Arial',
+        fontFamily:'Consolas',
         color:'#b800c2ff',
         align: 'center'
       }).setOrigin(0.5);
@@ -2167,7 +2167,7 @@ class GameScene extends Phaser.Scene {
     // Match statistics section
     this.add.text(400, 210, 'MATCH STATISTICS', {
       fontSize: '22px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#0ff'
     }).setOrigin(0.5);
 
@@ -2176,12 +2176,12 @@ class GameScene extends Phaser.Scene {
     // Enemies killed
     this.add.text(200, yPos, 'Enemies Defeated:', {
       fontSize: '16px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#aaa'
     }).setOrigin(0, 0.5);
     this.add.text(600, yPos, this.stats.enemiesKilled.toString(), {
       fontSize: '16px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#fff'
     }).setOrigin(1, 0.5);
     yPos += 30;
@@ -2189,7 +2189,7 @@ class GameScene extends Phaser.Scene {
     // Bosses defeated
     this.add.text(200, yPos, 'Bosses Defeated:', {
       fontSize: '16px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#aaa'
     }).setOrigin(0, 0.5);
     const bossesText = this.stats.bossesDefeated.length > 0
@@ -2197,7 +2197,7 @@ class GameScene extends Phaser.Scene {
       : 'None';
     this.add.text(600, yPos, bossesText, {
       fontSize: '14px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#fff'
     }).setOrigin(1, 0.5);
     yPos += 30;
@@ -2205,12 +2205,12 @@ class GameScene extends Phaser.Scene {
     // Maps explored
     this.add.text(200, yPos, 'Maps Explored:', {
       fontSize: '16px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#aaa'
     }).setOrigin(0, 0.5);
     this.add.text(600, yPos, this.stats.mapsExplored.length.toString(), {
       fontSize: '16px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#fff'
     }).setOrigin(1, 0.5);
     yPos += 30;
@@ -2218,7 +2218,7 @@ class GameScene extends Phaser.Scene {
     // Powerups collected
     this.add.text(200, yPos, 'Powerups Collected:', {
       fontSize: '16px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#aaa'
     }).setOrigin(0, 0.5);
     yPos += 25;
@@ -2229,7 +2229,7 @@ class GameScene extends Phaser.Scene {
       wrappedText.forEach((line, i) => {
         this.add.text(400, yPos + (i * 18), line, {
           fontSize: '13px',
-          fontFamily: 'Arial',
+          fontFamily: 'Consolas',
           color: '#fff'
         }).setOrigin(0.5);
       });
@@ -2237,7 +2237,7 @@ class GameScene extends Phaser.Scene {
     } else {
       this.add.text(400, yPos, 'None', {
         fontSize: '14px',
-        fontFamily: 'Arial',
+        fontFamily: 'Consolas',
         color: '#fff'
       }).setOrigin(0.5);
       yPos += 35;
@@ -2246,7 +2246,7 @@ class GameScene extends Phaser.Scene {
     // Return to menu
     this.add.text(400, 560, 'Press ENTER to return to menu', {
       fontSize: '20px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#888'
     }).setOrigin(0.5);
 
@@ -2406,7 +2406,7 @@ class GameScene extends Phaser.Scene {
     // Show boss intro message
     const msg = this.add.text(400, 250, 'WARNING!\n' + bossName, {
       fontSize: '48px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: '#f00',
       align: 'center',
       stroke: '#000',
@@ -2861,7 +2861,7 @@ class GameScene extends Phaser.Scene {
     // Mostrar mensaje
     const msg = this.add.text(400, 350, message, {
       fontSize: '24px',
-      fontFamily: 'Arial',
+      fontFamily: 'Consolas',
       color: color
     }).setOrigin(0.5);
 
@@ -3095,6 +3095,7 @@ class StoryScene extends Phaser.Scene {
 
     const text = this.add.text(400, 300, panels[panelIndex], {
       fontSize: '28px',
+      fontFamily: 'Consolas',
       fill: '#fff',
       align: 'center',
       wordWrap: { width: 700 }
@@ -3105,7 +3106,7 @@ class StoryScene extends Phaser.Scene {
       alpha: 1,
       duration: 500,
       onComplete: () => {
-        this.time.delayedCall(2500, () => {
+        this.time.delayedCall(2000, () => {
           this.tweens.add({
             targets: text,
             alpha: 0,
