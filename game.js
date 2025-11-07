@@ -1557,7 +1557,7 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < count; i++) {
       const a = offset + i * Math.PI * 2 / count;
       this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime);
-      this.playSound(500, 0.1)
+      this.playSound(400, 0.1)
     }
   }
 
@@ -1573,6 +1573,22 @@ class GameScene extends Phaser.Scene {
       lifetime,
       isBoss
     );
+  }
+
+  shootSpiral(source, bulletCount, arms, rotation, angleOffset, speed, lifetime, delayBetween = 100) {
+    for (let i = 0; i < bulletCount; i++) {
+      const delay = i * delayBetween;
+      this.time.delayedCall(delay, () => {
+        if (!source.active) return; // If boss died, don't shoot
+        const progress = i / bulletCount;
+        const angle = angleOffset + (progress * rotation);
+
+        for (let arm = 0; arm < arms; arm++) {
+          const armAngle = angle + (arm * Math.PI * 2 / arms);
+          this.createEnemyBullet(source.x, source.y, Math.cos(armAngle) * speed, Math.sin(armAngle) * speed, lifetime, true);
+        }
+      });
+    }
   }
 
   shootEnemy(e, t) {
@@ -2372,9 +2388,12 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  // ===== BOSS METHODS =====
+
   spawnBoss() {
     this.bossActive = true;
     this.enemiesThisWave = 1;
+    const starPoints = 3 + Math.floor(this.wave / 5);
 
     // Determine boss type
     let bossType, typeData, bossName;
@@ -2383,18 +2402,17 @@ class GameScene extends Phaser.Scene {
     else if (this.wave === 15) bossType = 'laser';
     else {
       // Generate random boss (wave 30+)
-      bossType = 'random';
-      const points = 7 + Math.floor((this.wave - 30) / 10); // 7+ points (starts at wave 30)
+      bossType = 'random'; 
       const waveScale = (this.wave - 20) / 10;
       typeData = {
         health: 500 + waveScale * 500,
         speed: 30,
-        shootDelay: Math.max(500, 1500 - waveScale * 100),
+        shootDelay: Math.max(100, 1000 - waveScale * 100),
         color: Math.random() * 0xffffff,
         points: 500 + waveScale * 500,
-        size: 60 + points * 3
+        size: 60 + starPoints * 3
       };
-      bossName = points + '-STAR BOSS';
+      bossName = starPoints + '-STAR BOSS';
     }
 
     if (bossType !== 'random') {
@@ -2436,10 +2454,10 @@ class GameScene extends Phaser.Scene {
       boss.angle = 0;
       boss.patternIndex = 0;
       boss.hasChildren = false;
+      boss.starPoints = starPoints;
 
       // Random boss properties
       if (bossType === 'random') {
-        boss.starPoints = 7 + Math.floor((this.wave - 30) / 10);
         boss.points = typeData.points; // Store points for scoring
         boss.attackPatterns = [];
         const patternCount = 2 + Math.floor(Math.random() * 2); // 2-3 patterns
@@ -2649,7 +2667,7 @@ class GameScene extends Phaser.Scene {
         } else if (pattern === 'laser') {
           // Laser: 5-bullet burst
           if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < boss.starPoints; i++) {
               this.time.delayedCall(i * 50, () => {
                 if (boss.active) this.shootAimed(boss, target, 300, 2000, true);
               });
@@ -2667,6 +2685,40 @@ class GameScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  drawBoss(boss) {
+    if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
+      const c = BOSS_TYPES.twins.color;
+      this.graphics.fillStyle(boss.bossType === 'twin1' ? c[0] : c[1]);
+      this.drawPolygon(boss.x, boss.y, 5, 30, 12, -Math.PI / 2);
+    } else if (boss.bossType === 'random') {
+      this.graphics.fillStyle(Math.floor(boss.health / boss.maxHealth * 0xffffff));
+      this.graphics.save();
+      this.graphics.translateCanvas(boss.x, boss.y);
+      this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
+      this.drawPolygon(0, 0, boss.starPoints, Math.min(boss.maxHealth / 20, 50), Math.min(boss.maxHealth / 40, 30), 0);
+      this.graphics.restore();
+    } else {
+      this.graphics.fillStyle(BOSS_TYPES[boss.bossType].color);
+      if (boss.bossType === 'pattern') {
+        this.drawPolygon(boss.x, boss.y, boss.starPoints, 35, 15, -Math.PI / 2);
+      } else if (boss.bossType === 'laser') {
+        this.graphics.save();
+        this.graphics.translateCanvas(boss.x, boss.y);
+        this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
+        this.drawPolygon(0, 0, boss.starPoints, BOSS_TYPES[boss.bossType].size, 20, 0);
+        this.graphics.restore();
+      }
+    }
+    const barW = 100, barH = 8, barX = boss.x - 50, barY = boss.y - 50;
+    const hp = boss.health / boss.maxHealth;
+    this.graphics.fillStyle(0x000000);
+    this.graphics.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+    this.graphics.fillStyle(0xff0000);
+    this.graphics.fillRect(barX, barY, barW, barH);
+    this.graphics.fillStyle(0x00ff00);
+    this.graphics.fillRect(barX, barY, barW * hp, barH);
   }
 
   updateTwin(twin, time) {
@@ -2932,65 +2984,6 @@ class GameScene extends Phaser.Scene {
     }
 
     this.graphics.restore();
-  }
-
-  // ===== SISTEMA MODULAR DE DISPAROS DE BOSSES =====
-
-  // Pattern: Complete spiral
-  // bulletCount: bullets per arm
-  // arms: spiral arms
-  // rotation: total rotation (rad)
-  // angleOffset: initial angle (rad)
-  // delayBetween: milisegundos entre cada bala (para efecto visual)
-  shootSpiral(source, bulletCount, arms, rotation, angleOffset, speed, lifetime, delayBetween = 100) {
-    for (let i = 0; i < bulletCount; i++) {
-      const delay = i * delayBetween;
-      this.time.delayedCall(delay, () => {
-        if (!source.active) return; // If boss died, don't shoot
-        const progress = i / bulletCount;
-        const angle = angleOffset + (progress * rotation);
-
-        for (let arm = 0; arm < arms; arm++) {
-          const armAngle = angle + (arm * Math.PI * 2 / arms);
-          this.createEnemyBullet(source.x, source.y, Math.cos(armAngle) * speed, Math.sin(armAngle) * speed, lifetime, true);
-        }
-      });
-    }
-  }
-
-
-  drawBoss(boss) {
-    if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
-      const c = BOSS_TYPES.twins.color;
-      this.graphics.fillStyle(boss.bossType === 'twin1' ? c[0] : c[1]);
-      this.drawPolygon(boss.x, boss.y, 5, 30, 12, -Math.PI / 2);
-    } else if (boss.bossType === 'random') {
-      this.graphics.fillStyle(Math.floor(boss.health / boss.maxHealth * 0xffffff));
-      this.graphics.save();
-      this.graphics.translateCanvas(boss.x, boss.y);
-      this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-      this.drawPolygon(0, 0, boss.starPoints, Math.min(boss.maxHealth / 20, 50), Math.min(boss.maxHealth / 40, 30), 0);
-      this.graphics.restore();
-    } else {
-      this.graphics.fillStyle(BOSS_TYPES[boss.bossType].color);
-      if (boss.bossType === 'pattern') {
-        this.drawPolygon(boss.x, boss.y, 4, 35, 15, -Math.PI / 2);
-      } else if (boss.bossType === 'laser') {
-        this.graphics.save();
-        this.graphics.translateCanvas(boss.x, boss.y);
-        this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-        this.drawPolygon(0, 0, 6, BOSS_TYPES[boss.bossType].size, 20, 0);
-        this.graphics.restore();
-      }
-    }
-    const barW = 100, barH = 8, barX = boss.x - 50, barY = boss.y - 50;
-    const hp = boss.health / boss.maxHealth;
-    this.graphics.fillStyle(0x000000);
-    this.graphics.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
-    this.graphics.fillStyle(0xff0000);
-    this.graphics.fillRect(barX, barY, barW, barH);
-    this.graphics.fillStyle(0x00ff00);
-    this.graphics.fillRect(barX, barY, barW * hp, barH);
   }
 
   openDoors() {
