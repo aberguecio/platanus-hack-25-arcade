@@ -1519,9 +1519,25 @@ class GameScene extends Phaser.Scene {
     // Move to nearest player
     const target = this.getNearestPlayer(enemy.x, enemy.y);
 
-    const dx = target.x - enemy.x;
-    const dy = target.y - enemy.y;
+    let dx = target.x - enemy.x;
+    let dy = target.y - enemy.y;
     const dist = Math.sqrt(dx*dx + dy*dy);
+
+    // Separation force: push away from nearby enemies
+    let sepX = 0, sepY = 0;
+    const minSep = 20; // Minimum separation distance
+    this.enemies.children.entries.forEach(other => {
+      if (other !== enemy && other.active) {
+        const odx = enemy.x - other.x;
+        const ody = enemy.y - other.y;
+        const odist = Math.sqrt(odx*odx + ody*ody);
+        if (odist < minSep && odist > 0) {
+          const force = (minSep - odist) / minSep;
+          sepX += (odx / odist) * force;
+          sepY += (ody / odist) * force;
+        }
+      }
+    });
 
     // Update angle
     const typeData = ENEMY_TYPES[enemy.type];
@@ -1531,9 +1547,11 @@ class GameScene extends Phaser.Scene {
 
     if (dist > 150) {
       const effectiveSpeed = enemy.speed * speedMultiplier;
-      enemy.setVelocity(dx/dist * effectiveSpeed, dy/dist * effectiveSpeed);
+      const vx = (dx/dist * effectiveSpeed) + sepX * 100;
+      const vy = (dy/dist * effectiveSpeed) + sepY * 100;
+      enemy.setVelocity(vx, vy);
     } else {
-      enemy.setVelocity(0);
+      enemy.setVelocity(sepX * 100, sepY * 100);
     }
 
     // Normal shooting for all enemies (hexagon uses spiral which has built-in delay)
