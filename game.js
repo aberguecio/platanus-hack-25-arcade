@@ -1125,6 +1125,14 @@ class GameScene extends Phaser.Scene {
     return dist;
   }
 
+  drawRotated(x, y, angle, drawFn) {
+    this.graphics.save();
+    this.graphics.translateCanvas(x, y);
+    this.graphics.rotateCanvas(angle);
+    drawFn();
+    this.graphics.restore();
+  }
+
   // Helper: Update homing bullets
   updateHomingBullets(bulletGroup) {
     bulletGroup.children.entries.forEach(b => {
@@ -1582,7 +1590,7 @@ class GameScene extends Phaser.Scene {
     const dy = tgt.y - src.y;
     const angle = Math.atan2(dy, dx);
     const perpAngle = angle + Math.PI / 2;
-    const offset = 15;
+    const offset = 10;
     for (let i = -1; i <= 1; i++) {
       const offsetX = Math.cos(perpAngle) * offset * i;
       const offsetY = Math.sin(perpAngle) * offset * i;
@@ -1688,32 +1696,17 @@ class GameScene extends Phaser.Scene {
         const normalizedDx = Math.abs(dx) / (wall.body.halfWidth + bullet.body.halfWidth);
         const normalizedDy = Math.abs(dy) / (wall.body.halfHeight + bullet.body.halfHeight);
 
-        // Calculate new velocity
-        let newVelX, newVelY;
+        // Calculate new velocity - unified logic for X/Y
+        const isX = normalizedDx > normalizedDy;
+        const d = isX ? dx : dy;
+        const prev = bullet.prevVelocity;
+        const newVelX = isX ? (prev ? -prev.x : (dx > 0 ? speed : -speed)) : (prev ? prev.x : 0);
+        const newVelY = isX ? (prev ? prev.y : 0) : (prev ? -prev.y : (dy > 0 ? speed : -speed));
 
-        if (normalizedDx > normalizedDy) {
-          // Side collision
-          newVelX = bullet.prevVelocity ? -bullet.prevVelocity.x : (dx > 0 ? speed : -speed);
-          newVelY = bullet.prevVelocity ? bullet.prevVelocity.y : 0;
-
-          // Empujar la bala lejos de la pared
-          if (dx < 0) {
-            bullet.x = wall.x - wall.body.halfWidth - bullet.body.halfWidth - 10;
-          } else {
-            bullet.x = wall.x + wall.body.halfWidth + bullet.body.halfWidth + 10;
-          }
-        } else {
-          // Vertical collision
-          newVelX = bullet.prevVelocity ? bullet.prevVelocity.x : 0;
-          newVelY = bullet.prevVelocity ? -bullet.prevVelocity.y : (dy > 0 ? speed : -speed);
-
-          // Empujar la bala lejos de la pared
-          if (dy < 0) {
-            bullet.y = wall.y - wall.body.halfHeight - bullet.body.halfHeight - 10;
-          } else {
-            bullet.y = wall.y + wall.body.halfHeight + bullet.body.halfHeight + 10;
-          }
-        }
+        // Push bullet away from wall
+        const offset = (isX ? wall.body.halfWidth : wall.body.halfHeight) + bullet.body.halfWidth + 10;
+        if (isX) bullet.x = wall.x + (dx < 0 ? -offset : offset);
+        else bullet.y = wall.y + (d < 0 ? -offset : offset);
 
         // Aplicar la nueva velocidad con setVelocity para asegurar que se aplique
         bullet.body.setVelocity(newVelX, newVelY);
@@ -1759,27 +1752,15 @@ class GameScene extends Phaser.Scene {
     const damage = bullet.damage || 10;
 
     // Apply elemental effects
-    // Los jefes tienen duraciones reducidas a la mitad
     if (bullet.elementalType && bullet.owner) {
-      const durationMultiplier = enemy.isBoss ? 0.5 : 1.0;
-
-      if (bullet.elementalType === 'ice') {
-        // Congelar enemigo
-        enemy.isFrozen = true;
-        enemy.frozenTime = this.time.now;
-        enemy.frozenDuration = bullet.owner.iceDuration * durationMultiplier;
-      } else if (bullet.elementalType === 'fire') {
-        // Quemar enemigo
-        enemy.isBurning = true;
-        enemy.burnStartTime = this.time.now;
-        enemy.burnDuration = bullet.owner.fireDuration * durationMultiplier;
-        enemy.burnTickTime = this.time.now;
-      } else if (bullet.elementalType === 'electric') {
-        // Electrocutar enemigo (paralizar completamente)
-        enemy.isElectrocuted = true;
-        enemy.electrocutedTime = this.time.now;
-        enemy.electrocutedDuration = bullet.owner.electricDuration * durationMultiplier;
-      }
+      const dur = (enemy.isBoss ? 0.5 : 1.0);
+      const t = this.time.now;
+      const effects = {
+        ice: () => {enemy.isFrozen = true; enemy.frozenTime = t; enemy.frozenDuration = bullet.owner.iceDuration * dur;},
+        fire: () => {enemy.isBurning = true; enemy.burnStartTime = t; enemy.burnDuration = bullet.owner.fireDuration * dur; enemy.burnTickTime = t;},
+        electric: () => {enemy.isElectrocuted = true; enemy.electrocutedTime = t; enemy.electrocutedDuration = bullet.owner.electricDuration * dur;}
+      };
+      if (effects[bullet.elementalType]) effects[bullet.elementalType]();
     }
 
     // Pierce check
@@ -2711,21 +2692,17 @@ class GameScene extends Phaser.Scene {
       this.drawPolygon(boss.x, boss.y, 5, 30, 12, -Math.PI / 2);
     } else if (boss.bossType === 'random') {
       this.graphics.fillStyle(Math.floor(boss.health / boss.maxHealth * 0xffffff));
-      this.graphics.save();
-      this.graphics.translateCanvas(boss.x, boss.y);
-      this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-      this.drawPolygon(0, 0, boss.starPoints, Math.min(boss.maxHealth / 20, 50), Math.min(boss.maxHealth / 40, 30), 0);
-      this.graphics.restore();
+      this.drawRotated(boss.x, boss.y, boss.angle * Math.PI / 180, () => {
+        this.drawPolygon(0, 0, boss.starPoints, Math.min(boss.maxHealth / 20, 50), Math.min(boss.maxHealth / 40, 30), 0);
+      });
     } else {
       this.graphics.fillStyle(BOSS_TYPES[boss.bossType].color);
       if (boss.bossType === 'pattern') {
         this.drawPolygon(boss.x, boss.y, boss.starPoints, 35, 15, -Math.PI / 2);
       } else if (boss.bossType === 'laser') {
-        this.graphics.save();
-        this.graphics.translateCanvas(boss.x, boss.y);
-        this.graphics.rotateCanvas(boss.angle * Math.PI / 180);
-        this.drawPolygon(0, 0, boss.starPoints, BOSS_TYPES[boss.bossType].size, 20, 0);
-        this.graphics.restore();
+        this.drawRotated(boss.x, boss.y, boss.angle * Math.PI / 180, () => {
+          this.drawPolygon(0, 0, boss.starPoints, BOSS_TYPES[boss.bossType].size, 20, 0);
+        });
       }
     }
     const barW = 100, barH = 8, barX = boss.x - 50, barY = boss.y - 50;
