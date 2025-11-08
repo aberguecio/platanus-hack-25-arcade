@@ -462,7 +462,7 @@ function renderPlayerControls(scene, x, startY, playerConfig, options = {}) {
 
 // MAP LAYOUTS
 const MAP_LAYOUTS = [
-  // Map 1 (waves 1-9)
+  // Map 1 (waves 1-5)
   [
     {x: 200, y: 150, w: 60, h: 60},
     {x: 600, y: 150, w: 60, h: 60},
@@ -470,14 +470,14 @@ const MAP_LAYOUTS = [
     {x: 600, y: 450, w: 60, h: 60},
     {x: 400, y: 300, w: 40, h: 40}
   ],
-  // Map 2 (waves 11-19)
+  // Map 2 (waves 6-10)
   [
     {x: 400, y: 150, w: 100, h: 40},
     {x: 400, y: 450, w: 100, h: 40},
     {x: 200, y: 300, w: 40, h: 100},
     {x: 600, y: 300, w: 40, h: 100}
   ],
-  // Map 3 (waves 21+)
+  // Map 3 (waves 11-15)
   [
     {x: 300, y: 200, w: 80, h: 80},
     {x: 500, y: 400, w: 80, h: 80},
@@ -490,6 +490,7 @@ const MAP_LAYOUTS = [
     {x: 600, y: 100, w: 80, h: 80},
     
   ],
+  // Map 4 (waves 16-20)
     [
     {x: 200, y: 150, w: 50, h: 50},
     {x: 200, y: 300, w: 50, h: 50},
@@ -1252,7 +1253,7 @@ class GameScene extends Phaser.Scene {
     if (entity.isBurning) {
       const elapsed = time - entity.burnStartTime;
       if (elapsed < entity.burnDuration) {
-        if (time - entity.burnTickTime > 450) {
+        if (time - entity.burnTickTime > 490) {
           entity.health -= 5;
           entity.burnTickTime = time;
           this.playSound(200, 0.03);
@@ -1573,6 +1574,20 @@ class GameScene extends Phaser.Scene {
       lifetime,
       isBoss
     );
+  }
+
+  // Helper: shoot thick laser (3 parallel lines)
+  shootThickLaser(src, tgt, spd, lifetime = 2000) {
+    const dx = tgt.x - src.x;
+    const dy = tgt.y - src.y;
+    const angle = Math.atan2(dy, dx);
+    const perpAngle = angle + Math.PI / 2;
+    const offset = 15;
+    for (let i = -1; i <= 1; i++) {
+      const offsetX = Math.cos(perpAngle) * offset * i;
+      const offsetY = Math.sin(perpAngle) * offset * i;
+      this.shootAimed({x: src.x + offsetX, y: src.y + offsetY}, {x: tgt.x + offsetX, y: tgt.y + offsetY}, spd, lifetime, true);
+    }
   }
 
   shootSpiral(source, bulletCount, arms, rotation, angleOffset, speed, lifetime, delayBetween = 100) {
@@ -2102,7 +2117,7 @@ class GameScene extends Phaser.Scene {
     overlay.fillRect(0, 0, 800, 600);
 
     // Title
-    this.add.text(400, 75, 'GAME OVER', {
+    this.add.text(400, 75, 'SILENCED', {
       fontSize: '56px',
       fontFamily: 'Arial',
       color: '#f00',
@@ -2458,17 +2473,17 @@ class GameScene extends Phaser.Scene {
 
       // Random boss properties
       if (bossType === 'random') {
-        boss.points = typeData.points; // Store points for scoring
+        boss.points = typeData.points;
+        const allPatterns = ['wave', 'spiral', 'laser'];
+        const count = 2 + Math.floor(Math.random() * 2); // 2-3 patterns
         boss.attackPatterns = [];
-        const patternCount = 2 + Math.floor(Math.random() * 2); // 2-3 patterns
-        for (let i = 0; i < patternCount; i++) {
-          const r = Math.random();
-          if (r < 0.33) boss.attackPatterns.push('wave');
-          else if (r < 0.66) boss.attackPatterns.push('spiral');
-          else boss.attackPatterns.push('laser');
+        for (let i = 0; i < count; i++) {
+          const idx = Math.floor(Math.random() * allPatterns.length);
+          boss.attackPatterns.push(allPatterns[idx]);
+          allPatterns.splice(idx, 1); // Remove to avoid duplicates
         }
         boss.currentPattern = 0;
-        boss.patternTimer = 0;
+        boss.patternShots = 0;
       }
 
       // Pattern boss vars
@@ -2586,7 +2601,7 @@ class GameScene extends Phaser.Scene {
           if (burstElapsed < boss.burstDuration) {
             // Shoot in burst
             if (time - boss.lastBurstShot > boss.burstShotInterval) {
-              this.shootAimed(boss, target, 250, 2000, true);
+              this.shootThickLaser(boss, target, 500);
               boss.lastBurstShot = time;
             }
           } else {
@@ -2647,41 +2662,43 @@ class GameScene extends Phaser.Scene {
           if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
             this.shootCircle(boss, boss.starPoints * 2, 0, 200, 0, 3000);
             boss.lastShot = time;
+            boss.patternShots = (boss.patternShots || 0) + 1;
           }
         } else if (pattern === 'spiral') {
           if (!boss.spiralFired) {
             const bulletCount = 30;
             const delayBetween = 80;
-            const spiralDuration = bulletCount * delayBetween; // 2400ms
             this.shootSpiral(boss, bulletCount, boss.starPoints, Math.PI * 2, 0, 250, 3000, delayBetween);
             boss.spiralFired = true;
             boss.lastShot = time;
-            // Switch pattern after spiral completes + shootDelay cooldown
-            this.time.delayedCall(spiralDuration + boss.shootDelay * shootDelayMultiplier, () => {
+            // Switch pattern after spiral completes
+            this.time.delayedCall(bulletCount * delayBetween, () => {
               if (boss.active) {
                 boss.currentPattern = (boss.currentPattern + 1) % boss.attackPatterns.length;
                 boss.spiralFired = false;
+                boss.patternShots = 0;
+                boss.lastShot = time;
               }
             });
           }
         } else if (pattern === 'laser') {
-          // Laser: 5-bullet burst
+          // Laser: thick beam
           if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
             for (let i = 0; i < boss.starPoints; i++) {
               this.time.delayedCall(i * 50, () => {
-                if (boss.active) this.shootAimed(boss, target, 300, 2000, true);
+                if (boss.active) this.shootThickLaser(boss, target, 300);;
               });
             }
             boss.lastShot = time;
+            boss.patternShots = (boss.patternShots || 0) + 1;
           }
         }
 
         // Auto-switch for wave/laser after 3 shots
-        if (pattern !== 'spiral') {
-          if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier * 3.5) {
-            boss.currentPattern = (boss.currentPattern + 1) % boss.attackPatterns.length;
-            boss.lastShot = time;
-          }
+        if (pattern !== 'spiral' && (boss.patternShots || 0) >= 3) {
+          boss.currentPattern = (boss.currentPattern + 1) % boss.attackPatterns.length;
+          boss.patternShots = 0;
+          boss.lastShot = time;
         }
       }
     }
@@ -3086,7 +3103,7 @@ class StoryScene extends Phaser.Scene {
       return;
     }
 
-    const text = this.add.text(400, 300, panels[panelIndex], {
+    const text = this.add.text(400, 280, panels[panelIndex], {
       fontSize: '28px',
       fontFamily: 'Arial',
       fill: '#fff',
