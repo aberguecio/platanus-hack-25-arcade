@@ -2295,7 +2295,7 @@ class GameScene extends Phaser.Scene {
       typeData = {
         health: 500 + waveScale * 500,
         speed: 30,
-        shootDelay: Math.max(100, 1500 - waveScale * 200),
+        shootDelay: Math.max(100, 1000 - waveScale * 200),
         color: Math.random() * 0xffffff,
         points: 500 + waveScale * 500,
         size: Math.max(50 + Math.random() * 40 - this.wave, 30)
