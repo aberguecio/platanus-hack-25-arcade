@@ -648,7 +648,7 @@ class GameScene extends Phaser.Scene {
       });
     });
     wallGroups.forEach(walls => {
-      this.physics.add.collider(this.enemyBullets, walls, (b) => b.destroy());
+      this.physics.add.overlap(this.enemyBullets, walls, (b) => b.destroy());
       this.physics.add.collider(this.enemies, walls);
     });
 
