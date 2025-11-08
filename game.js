@@ -61,6 +61,26 @@ if (ARCADE_MODE) {
   }
 }
 
+// High scores system
+const getHighScores = () => {
+  try {
+    const scores = document.cookie.match('(^| )obs_highScores=([^;]+)');
+    return scores ? JSON.parse(decodeURIComponent(scores[2])) : [];
+  } catch(e) {
+    return [];
+  }
+};
+
+const setCookie = (name, value) => {
+  try {
+    const d = new Date();
+    d.setTime(d.getTime() + 31536000000);
+    const expires = 'expires=' + d.toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)};${expires};path=/;SameSite=Lax`;
+  } catch (e) {
+  }
+}
+
 // MENU SCENE
 class MenuScene extends Phaser.Scene {
   constructor() {
@@ -89,16 +109,6 @@ class MenuScene extends Phaser.Scene {
       stroke: '#000',
       strokeThickness: 4
     }).setOrigin(0.5);
-
-    // High scores helper functions
-    const getHighScores = () => {
-      try {
-        const scores = document.cookie.match('(^| )obs_highScores=([^;]+)');
-        return scores ? JSON.parse(decodeURIComponent(scores[2])) : [];
-      } catch(e) {
-        return [];
-      }
-    };
 
     // High scores section
     const scores = getHighScores();
@@ -324,9 +334,9 @@ const ENEMY_TYPES = {
 
 // BOSS TYPE DEFINITIONS
 const BOSS_TYPES = {
-  pattern: {health: 500, speed: 30, shootDelay: 1500, size: 60, name: 'Shooting Star', color: 0xffff00},
-  twins: {health: 1200, speed: 40, shootDelay: 2000, size: 70, name: 'Twins Shifter´s', color: [0xff00ff, 0x00ffff]},
-  laser: {health: 2000, speed: 50, shootDelay: 800, size: 40, name: 'Ultimate Laser', color: 0x00ffaa}
+  pattern: {health: 500, speed: 30, shootDelay: 1500, size: 50, name: 'Shooting Star', color: 0xffff00},
+  twins: {health: 1200, speed: 40, shootDelay: 2000, size: 40, name: 'Twins Shifter´s', color: [0xff00ff, 0x00ffff]},
+  laser: {health: 2000, speed: 50, shootDelay: 800, size: 50, name: 'Ultimate Laser', color: 0x00ffaa}
 };
 
 // POWERUP TYPE DEFINITIONS
@@ -1884,88 +1894,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  handleBossDeath(boss, deathPosition) {
-    // Centralized boss death handling
-    this.lastEnemyPosition = deathPosition;
-    const points = Math.max(500, ((this.wave / 5) * 500));
-
-    // Handle twins special case
-    if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
-      const twinPts = points / 2;
-      const otherTwin = boss.sibling;
-      if (otherTwin && otherTwin.active && otherTwin.health > 0) {
-        // Other twin still alive - partial reward only
-        this.score += twinPts;
-        this.scoreText.setText('Score: ' + this.score);
-        this.playSound(600, 0.3);
-        // Ensure the surviving twin keeps attacking immediately
-        try {
-          otherTwin.isAttacking = true;
-          otherTwin.phaseStartTime = this.time.now;
-          otherTwin.spiralFired = false;
-        } catch (e) {
-          // defensive: ignore if otherTwin state not writable
-        }
-        return; // Don't end boss fight yet
-      } else {
-        // Both twins dead
-        this.score += twinPts;
-        this.scoreText.setText('Score: ' + this.score);
-
-        // Track boss defeat
-        if (!this.stats.bossesDefeated.includes(BOSS_TYPES.twins.name)) {
-          this.stats.bossesDefeated.push(BOSS_TYPES.twins.name);
-        }
-      }
-    } else {
-      // Normal or random boss
-      let bossName;
-      if (boss.bossType === 'random') {
-        // Random boss uses stored points
-        bossName = boss.starPoints + '-STAR BOSS';
-      } else {
-        const typeData = BOSS_TYPES[boss.bossType];
-        bossName = typeData.name;
-      }
-
-      this.score += points;
-      this.scoreText.setText('Score: ' + this.score);
-
-      // Track boss defeat
-      if (!this.stats.bossesDefeated.includes(bossName)) {
-        this.stats.bossesDefeated.push(bossName);
-      }
-    }
-
-    // Common boss death logic
-    this.bossActive = false;
-    this.openDoors();
-    this.playSound(600, 0.3);
-    if (!this.reviveDeadPlayers()) {
-      this.trySpawnPowerup(true, deathPosition); // just give a power-up if no revival
-    }
-
-    // Spawn 2-4 hearts slightly offset from boss death position
-    const numHearts = this.numPlayers + Math.floor(Math.random() * 3); // 2 a 4 corazones
-    for (let i = 0; i < numHearts; i++) {
-      const offsetX = (Math.random() - 0.5) * 80; // -40 a +40 pixels X
-      const offsetY = (Math.random() - 0.5) * 80; // -40 a +40 pixels Y
-      this.spawnPowerup({
-        x: deathPosition.x + offsetX,
-        y: deathPosition.y + offsetY
-      }, 'heart');
-    }
-
-    // Show message
-    this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
-      fontSize: '32px',
-      fontFamily: 'Arial',
-      color: '#0ff',
-      align: 'center'
-    }).setOrigin(0.5);
-    // this.time.delayedCall(3000, () => msg.destroy());
-  }
-
   reviveDeadPlayers() {
     // Only revive in 2P mode
     if (this.numPlayers !== 2) return false;
@@ -2058,16 +1986,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  setCookie(name, value) {
-    try {
-      const d = new Date();
-      d.setTime(d.getTime() + 31536000000);
-      const expires = 'expires=' + d.toUTCString();
-      document.cookie = `${name}=${encodeURIComponent(value)};${expires};path=/;SameSite=Lax`;
-    } catch (e) {
-    }
-  }
-
   endGame() {
     this.gameOver = true;
 
@@ -2103,16 +2021,6 @@ class GameScene extends Phaser.Scene {
       color: '#fff'
     }).setOrigin(0.5);
 
-    // High scores system
-    const getHighScores = () => {
-      try {
-        const scores = document.cookie.match('(^| )obs_highScores=([^;]+)');
-        return scores ? JSON.parse(decodeURIComponent(scores[2])) : [];
-      } catch(e) {
-        return [];
-      }
-    };
-
     const isHighScore = (score) => {
       const scores = getHighScores();
       return scores.length < 5 || score > scores[scores.length - 1].score;
@@ -2123,7 +2031,7 @@ class GameScene extends Phaser.Scene {
       scores.push({name, score});
       scores.sort((a, b) => b.score - a.score);
       scores = scores.slice(0, 5); // Keep only top 5
-      this.setCookie('obs_highScores', JSON.stringify(scores));
+      setCookie('obs_highScores', JSON.stringify(scores));
     };
 
     // High score entry
@@ -2382,15 +2290,15 @@ class GameScene extends Phaser.Scene {
     else if (this.wave === 15) bossType = 'laser';
     else {
       // Generate random boss (wave 30+)
-      bossType = 'random'; 
+      bossType = 'random';
       const waveScale = (this.wave - 20) / 10;
       typeData = {
         health: 500 + waveScale * 500,
         speed: 30,
-        shootDelay: Math.max(100, 1000 - waveScale * 100),
+        shootDelay: Math.max(100, 1500 - waveScale * 200),
         color: Math.random() * 0xffffff,
         points: 500 + waveScale * 500,
-        size: 60 + starPoints * 3
+        size: Math.max(50 + Math.random() * 40 - this.wave, 30)
       };
       bossName = starPoints + '-STAR BOSS';
     }
@@ -2435,6 +2343,7 @@ class GameScene extends Phaser.Scene {
       boss.patternIndex = 0;
       boss.hasChildren = false;
       boss.starPoints = starPoints;
+      boss.size = typeData.size;
 
       // Random boss properties
       if (bossType === 'random') {
@@ -2583,7 +2492,7 @@ class GameScene extends Phaser.Scene {
       const hp = Math.ceil(150 * this.getSpawnDifficulty());
       const mkTwin = (x, y, type, atk) => {
         const t = this.enemies.create(x, y, null);
-        t.setSize(35, 35).setVisible(false);
+        t.setSize(boss.size, boss.size).setVisible(false);
         t.isBoss = true;
         t.bossType = type;
         t.health = t.maxHealth = hp;
@@ -2592,6 +2501,7 @@ class GameScene extends Phaser.Scene {
         t.lastShot = 0;
         t.phaseStartTime = time;
         t.isAttacking = atk;
+        t.size = boss.size;
         return t;
       };
       const t1 = mkTwin(300, 200, 'twin1', true);
@@ -2620,24 +2530,21 @@ class GameScene extends Phaser.Scene {
       boss.angle += delta * 0.05; // Rotate
 
       // Attack patterns using shootDelay
-      if (time - boss.spawnTime > 1000) {
+      if (time - boss.spawnTime > 1000 && time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
         const pattern = boss.attackPatterns[boss.currentPattern];
 
         if (pattern === 'wave') {
-          if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
-            this.shootCircle(boss, boss.starPoints * 2, 0, 200, 0, 3000);
-            boss.lastShot = time;
-            boss.patternShots = (boss.patternShots || 0) + 1;
-          }
+          this.shootCircle(boss, boss.starPoints * 2, 0, 200, 0, 3000);
+          boss.lastShot = time;
+          boss.patternShots = (boss.patternShots || 0) + 1;
         } else if (pattern === 'spiral') {
           if (!boss.spiralFired) {
             const bulletCount = 30;
             const delayBetween = 80;
             this.shootSpiral(boss, bulletCount, boss.starPoints, Math.PI * 2, 0, 250, 3000, delayBetween);
             boss.spiralFired = true;
-            boss.lastShot = time;
             // Switch pattern after spiral completes
-            this.time.delayedCall(bulletCount * delayBetween, () => {
+            this.time.delayedCall(bulletCount * delayBetween + boss.shootDelay * shootDelayMultiplier, () => {
               if (boss.active) {
                 boss.currentPattern = (boss.currentPattern + 1) % boss.attackPatterns.length;
                 boss.spiralFired = false;
@@ -2648,15 +2555,13 @@ class GameScene extends Phaser.Scene {
           }
         } else if (pattern === 'laser') {
           // Laser: thick beam
-          if (time - boss.lastShot > boss.shootDelay * shootDelayMultiplier) {
-            for (let i = 0; i < boss.starPoints; i++) {
-              this.time.delayedCall(i * 50, () => {
-                if (boss.active) this.shootThickLaser(boss, target, 300);;
-              });
-            }
-            boss.lastShot = time;
-            boss.patternShots = (boss.patternShots || 0) + 1;
+          for (let i = 0; i < boss.starPoints; i++) {
+            this.time.delayedCall(i * 50, () => {
+              if (boss.active) this.shootThickLaser(boss, target, 300);;
+            });
           }
+          boss.lastShot = time;
+          boss.patternShots = (boss.patternShots || 0) + 1;
         }
 
         // Auto-switch for wave/laser after 3 shots
@@ -2670,22 +2575,26 @@ class GameScene extends Phaser.Scene {
   }
 
   drawBoss(boss) {
+    // Calculate star radii from hitbox size
+    const outerR = boss.size * 0.7; // Outer radius ~70% of hitbox
+    const innerR = boss.size * 0.35; // Inner radius ~35% of hitbox
+
     if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
       const c = BOSS_TYPES.twins.color;
       this.graphics.fillStyle(boss.bossType === 'twin1' ? c[0] : c[1]);
-      this.drawPolygon(boss.x, boss.y, 5, 30, 12, -Math.PI / 2);
+      this.drawPolygon(boss.x, boss.y, 5, outerR * 1.2, innerR * 0.8, -Math.PI / 2);
     } else if (boss.bossType === 'random') {
       this.graphics.fillStyle(Math.floor(boss.health / boss.maxHealth * 0xffffff));
       this.drawRotated(boss.x, boss.y, boss.angle * Math.PI / 180, () => {
-        this.drawPolygon(0, 0, boss.starPoints, Math.min(boss.maxHealth / 20, 50), Math.min(boss.maxHealth / 40, 30), 0);
+        this.drawPolygon(0, 0, boss.starPoints, outerR, innerR, 0);
       });
     } else {
       this.graphics.fillStyle(BOSS_TYPES[boss.bossType].color);
       if (boss.bossType === 'pattern') {
-        this.drawPolygon(boss.x, boss.y, boss.starPoints, 35, 15, -Math.PI / 2);
+        this.drawPolygon(boss.x, boss.y, boss.starPoints, outerR * 1.2, innerR * 0.8, -Math.PI / 2);
       } else if (boss.bossType === 'laser') {
         this.drawRotated(boss.x, boss.y, boss.angle * Math.PI / 180, () => {
-          this.drawPolygon(0, 0, boss.starPoints, BOSS_TYPES[boss.bossType].size, 20, 0);
+          this.drawPolygon(0, 0, boss.starPoints, outerR, innerR, 0);
         });
       }
     }
@@ -2785,6 +2694,88 @@ class GameScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  handleBossDeath(boss, deathPosition) {
+    // Centralized boss death handling
+    this.lastEnemyPosition = deathPosition;
+    const points = Math.max(500, ((this.wave / 5) * 500));
+
+    // Handle twins special case
+    if (boss.bossType === 'twin1' || boss.bossType === 'twin2') {
+      const twinPts = points / 2;
+      const otherTwin = boss.sibling;
+      if (otherTwin && otherTwin.active && otherTwin.health > 0) {
+        // Other twin still alive - partial reward only
+        this.score += twinPts;
+        this.scoreText.setText('Score: ' + this.score);
+        this.playSound(600, 0.3);
+        // Ensure the surviving twin keeps attacking immediately
+        try {
+          otherTwin.isAttacking = true;
+          otherTwin.phaseStartTime = this.time.now;
+          otherTwin.spiralFired = false;
+        } catch (e) {
+          // defensive: ignore if otherTwin state not writable
+        }
+        return; // Don't end boss fight yet
+      } else {
+        // Both twins dead
+        this.score += twinPts;
+        this.scoreText.setText('Score: ' + this.score);
+
+        // Track boss defeat
+        if (!this.stats.bossesDefeated.includes(BOSS_TYPES.twins.name)) {
+          this.stats.bossesDefeated.push(BOSS_TYPES.twins.name);
+        }
+      }
+    } else {
+      // Normal or random boss
+      let bossName;
+      if (boss.bossType === 'random') {
+        // Random boss uses stored points
+        bossName = boss.starPoints + '-STAR BOSS';
+      } else {
+        const typeData = BOSS_TYPES[boss.bossType];
+        bossName = typeData.name;
+      }
+
+      this.score += points;
+      this.scoreText.setText('Score: ' + this.score);
+
+      // Track boss defeat
+      if (!this.stats.bossesDefeated.includes(bossName)) {
+        this.stats.bossesDefeated.push(bossName);
+      }
+    }
+
+    // Common boss death logic
+    this.bossActive = false;
+    this.openDoors();
+    this.playSound(600, 0.3);
+    if (!this.reviveDeadPlayers()) {
+      this.trySpawnPowerup(true, deathPosition); // just give a power-up if no revival
+    }
+
+    // Spawn 2-4 hearts slightly offset from boss death position
+    const numHearts = this.numPlayers + Math.floor(Math.random() * 3); // 2 a 4 corazones
+    for (let i = 0; i < numHearts; i++) {
+      const offsetX = (Math.random() - 0.5) * 80; // -40 a +40 pixels X
+      const offsetY = (Math.random() - 0.5) * 80; // -40 a +40 pixels Y
+      this.spawnPowerup({
+        x: deathPosition.x + offsetX,
+        y: deathPosition.y + offsetY
+      }, 'heart');
+    }
+
+    // Show message
+    this.add.text(400, 300, 'BOSS DEFEATED!\nGo through the doors!', {
+      fontSize: '32px',
+      fontFamily: 'Arial',
+      color: '#0ff',
+      align: 'center'
+    }).setOrigin(0.5);
+    // this.time.delayedCall(3000, () => msg.destroy());
   }
 
   // ===== SISTEMA DE POWERUPS =====
