@@ -644,7 +644,7 @@ class GameScene extends Phaser.Scene {
     const playerBulletGroups = [this.playerBullets, this.playerSpecialBullets];
     playerBulletGroups.forEach(bullets => {
       wallGroups.forEach(walls => {
-        this.physics.add.collider(bullets, walls, (b, wall) => this.handleBulletWallCollision(b, wall));
+        this.physics.add.overlap(bullets, walls, (b, wall) => this.handleBulletWallCollision(b, wall));
       });
     });
     wallGroups.forEach(walls => {
@@ -710,6 +710,8 @@ class GameScene extends Phaser.Scene {
       this.input.keyboard.on('keydown-TWO', () => this.debugSkipToWave(10));
       this.input.keyboard.on('keydown-THREE', () => this.debugSkipToWave(15));
       this.input.keyboard.on('keydown-FOUR', () => this.debugSkipToWave(20));
+      this.input.keyboard.on('keydown-FIVE', () => this.debugSkipToWave(25));
+      this.input.keyboard.on('keydown-SIX', () => this.debugSkipToWave(30));
       this.input.keyboard.on('keydown-NINE', () => this.debugKillAllEnemies());
       this.input.keyboard.on('keydown-ZERO', () => this.trySpawnPowerup(true, { x: this.p1.x, y: this.p1.y }));
     }
@@ -1213,11 +1215,6 @@ class GameScene extends Phaser.Scene {
 
   // Helper: Create enemy bullet with auto-destroy
   createEnemyBullet(x, y, vx, vy, lifetime = 3000, playSound = false) {
-    // Check if spawn point collides with walls or obstacles
-    if (!this.isBulletPositionValid(x, y, 7)) {
-      return null;
-    }
-
     const b = this.enemyBullets.create(x, y);
     b.setSize(10, 10);
     b.setVisible(false);
@@ -1309,9 +1306,6 @@ class GameScene extends Phaser.Scene {
 
   // Helper: spawn a player bullet at a position with common setup
   spawnPlayerBullet(group, x, y, vx, vy, size, damage, player, elementalType, color) {
-    // Validate spawn position (margin 7 as used in original code)
-    if (!this.isBulletPositionValid(x, y, 7)) return null;
-
     const b = group.create(x, y);
     b.setSize(size, size);
     b.setVisible(false);
@@ -2013,16 +2007,6 @@ class GameScene extends Phaser.Scene {
       this.pauseGraphics.clear();
     }
   }
-
-  // Helper: Check if a point is inside or too close to walls/obstacles
-  isBulletPositionValid(x, y, margin = 7) {
-    const checkCollision = (group) => group.children.entries.some(w =>
-      Math.abs(x - w.x) < w.body.halfWidth + margin &&
-      Math.abs(y - w.y) < w.body.halfHeight + margin
-    );
-    return !checkCollision(this.walls) && !checkCollision(this.obstacles);
-  }
-
 
   drawPauseMenu() {
     // Semi-transparent overlay
