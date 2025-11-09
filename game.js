@@ -102,13 +102,14 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // High scores section
+    this.add.text(400, 380, 'HIGH SCORES', {
+      fontSize: '20px',
+      fontFamily: 'Arial',
+      color: '#ffcc00'
+    }).setOrigin(0.5);
+    
     const scores = getHighScores();
     if (scores.length > 0) {
-      this.add.text(400, 380, 'HIGH SCORES', {
-        fontSize: '20px',
-        fontFamily: 'Arial',
-        color: '#ffcc00'
-      }).setOrigin(0.5);
 
       scores.forEach((score, i) => {
         this.add.text(400, 410 + i * 25, `${i + 1}. ${score.name} - ${score.score}`, {
@@ -117,6 +118,13 @@ class MenuScene extends Phaser.Scene {
           color: i === 0 ? '#ffcc00' : '#cc9900'
         }).setOrigin(0.5);
       });
+    } else {
+      this.add.text(400, 410, 'No high scores yet.', {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        color: '#888'
+      }).setOrigin(0.5);
+
     }
 
     // Menu options with background boxes
