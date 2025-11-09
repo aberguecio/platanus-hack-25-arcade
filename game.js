@@ -124,15 +124,15 @@ class MenuScene extends Phaser.Scene {
     this.box2 = this.add.graphics();
 
     // Neon glow for buttons
-    this.glow1 = addNeonText(this, 400, 240, '1 PLAYER', '40px', '#00ff00ff');
-    this.glow2 = addNeonText(this, 400, 310, '2 PLAYERS', '40px', '#0099ffff');
+    this.glow1 = addNeonText(this, 400, 241, '1 PLAYER', '43px', '#00ff00ff');
+    this.glow2 = addNeonText(this, 400, 311, '2 PLAYERS', '43px', '#0099ffff');
 
     this.text1 = this.add.text(400, 240, '1 PLAYER', {
       fontSize: '36px',
       fontFamily: 'Arial',
       color: '#00ff00',
       stroke: '#000',
-      strokeThickness: 6
+      strokeThickness: 4
     }).setOrigin(0.5);
 
     this.text2 = this.add.text(400, 310, '2 PLAYERS', {
@@ -140,7 +140,7 @@ class MenuScene extends Phaser.Scene {
       fontFamily: 'Arial',
       color: '#0099ff',
       stroke: '#000',
-      strokeThickness: 6
+      strokeThickness: 4
     }).setOrigin(0.5);
 
 
@@ -442,11 +442,11 @@ function setButtonState(box, text, glow, selected, x, y, w, h, bgColor, normalCo
   box.clear();
   if (selected) {
     box.lineStyle(3, 0xffff00, 1);
-    box.fillStyle(bgColor, 0.3);
+    box.fillStyle(bgColor, 0.4);
     box.fillRoundedRect(x, y, w, h, 10);
     box.strokeRoundedRect(x, y, w, h, 10);
     text.setScale(1.2).setColor('#ffff00');
-    glow.setAlpha(0.3);
+    glow.setAlpha(1);
   } else {
     text.setScale(1.0).setColor(normalColor);
     glow.setAlpha(0.03);
