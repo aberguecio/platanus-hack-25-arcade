@@ -1036,7 +1036,7 @@ class GameScene extends Phaser.Scene {
 
   initPlayer(x, y, state) {
     const p = this.physics.add.sprite(x, y, null).setSize(30, 30).setVisible(false);
-    const d = {health:5,maxHealth:5,baseSpeed:200,speed:200,angle:0,currentSpecialCooldown:0,invulnerable:false,lastHitTime:0,specialReadyEffect:0,specialBullets:1,specialCooldown:2000,normalShotCooldown:300,pierce:0,damageMultiplier:1.0,spreadBullets:1,homingStrength:0,bounceCount:0,hasBackShot:false,iceDuration:0,fireDuration:0,electricDuration:0};
+    const d = {health:5,maxHealth:5,baseSpeed:200,speed:200,angle:0,currentSpecialCooldown:0,invulnerable:false,lastHitTime:0,specialReadyEffect:0,specialBullets:1,specialCooldown:2000,normalShotCooldown:300,pierce:0,damageMultiplier:1.0,spreadBullets:1,homingStrength:0,bounceCount:0,backShotCount:0,iceDuration:0,fireDuration:0,electricDuration:0};
     for(const k in d)p[k]=state?state[k]??d[k]:d[k];
     return p;
   }
@@ -1162,6 +1162,28 @@ class GameScene extends Phaser.Scene {
       entity.setVelocity(dx/dist * speed * dir, dy/dist * speed * dir);
     }
     return dist;
+  }
+
+  // Helper: Shoot multiple bullets with spread
+  shootSpread(group, player, baseAngle, count, spread, speed, damage, elementalType, color, size = 16) {
+    for (let i = 0; i < count; i++) {
+      const offset = (i - (count - 1) / 2) * spread;
+      const spreadAngle = baseAngle + offset;
+      const posX = player.x + Math.cos(spreadAngle) * 25;
+      const posY = player.y + Math.sin(spreadAngle) * 25;
+      this.spawnPlayerBullet(
+        group,
+        posX,
+        posY,
+        Math.cos(spreadAngle) * speed,
+        Math.sin(spreadAngle) * speed,
+        size,
+        damage,
+        player,
+        elementalType,
+        color
+      );
+    }
   }
 
   drawRotated(x, y, angle, drawFn) {
@@ -1387,42 +1409,13 @@ class GameScene extends Phaser.Scene {
         elementalType = elementals[Math.floor(Math.random() * elementals.length)];
       }
 
-      for (let i = 0; i < bulletCount; i++) {
-        const offset = (i - (bulletCount - 1) / 2) * spread;
-        const spreadAngle = angle + offset;
-        const posX = player.x + Math.cos(spreadAngle) * 25;
-        const posY = player.y + Math.sin(spreadAngle) * 25;
-        this.spawnPlayerBullet(
-          group,
-          posX,
-          posY,
-          Math.cos(spreadAngle) * speed,
-          Math.sin(spreadAngle) * speed,
-          16,
-          damage,
-          player,
-          elementalType,
-          color
-        );
-      }
+      // Shoot forward bullets
+      this.shootSpread(group, player, angle, bulletCount, spread, speed, damage, elementalType, color);
 
-      // BackShot
-      if (player.hasBackShot) {
-        const backAngle = angle + Math.PI; // 180 grados opuesto
-        const posX = player.x + Math.cos(backAngle) * 25;
-        const posY = player.y + Math.sin(backAngle) * 25;
-        this.spawnPlayerBullet(
-          group,
-          posX,
-          posY,
-          Math.cos(backAngle) * speed,
-          Math.sin(backAngle) * speed,
-          16,
-          damage,
-          player,
-          elementalType,
-          color
-        );
+      // BackShot - shoot backwards with spread
+      if (player.backShotCount > 0) {
+        const backSpread = player.backShotCount > 1 ? 0.2 : 0;
+        this.shootSpread(group, player, angle + Math.PI, player.backShotCount, backSpread, speed, damage, elementalType, color);
       }
 
       this.playSound(600, 0.2);
@@ -1436,24 +1429,7 @@ class GameScene extends Phaser.Scene {
       const baseDamage = 10;
       const damage = Math.floor(baseDamage * player.damageMultiplier);
 
-      for (let i = 0; i < bulletCount; i++) {
-        const offset = (i - (bulletCount - 1) / 2) * spread;
-        const spreadAngle = angle + offset;
-        const posX = player.x + Math.cos(spreadAngle) * 25;
-        const posY = player.y + Math.sin(spreadAngle) * 25;
-        this.spawnPlayerBullet(
-          group,
-          posX,
-          posY,
-          Math.cos(spreadAngle) * speed,
-          Math.sin(spreadAngle) * speed,
-          8,
-          damage,
-          player,
-          null,
-          color
-        );
-      }
+      this.shootSpread(group, player, angle, bulletCount, spread, speed, damage, null, color, 8);
       this.playSound(800, 0.08);
       // Small muzzle flash
       this.createMuzzleFlash(player.x, player.y, angle, color);
@@ -2430,7 +2406,7 @@ class GameScene extends Phaser.Scene {
         } else if (boss.attackPhase === 1 || boss.attackPhase === 3) {
           // Pause 1: 2 segundos
           if (phaseTime >= phaseDelay) {
-            boss.attackPhase = 2;
+            boss.attackPhase = boss.attackPhase === 1 ? 2 : 0;
             boss.phaseStartTime = time;
           }
         } else if (boss.attackPhase === 2) {
@@ -2886,7 +2862,7 @@ class GameScene extends Phaser.Scene {
       fireRate: p => { p.normalShotCooldown = Math.max(50, p.normalShotCooldown * 0.75); p.specialCooldown = Math.max(300, p.specialCooldown * 0.75); return powerupData.description; },
       pierceShot: p => { p.pierce++; return `${powerupData.description} (${p.pierce})`; },
       moreDamage: p => { p.damageMultiplier += 0.25; return `${powerupData.description} (x${p.damageMultiplier.toFixed(2)})`; },
-      backShot: p => { p.hasBackShot = true; return powerupData.description; },
+      backShot: p => { p.backShotCount++; return `${powerupData.description} (${p.backShotCount})`; },
       spreadShot: p => { p.spreadBullets += 2; return `${powerupData.description} (${p.spreadBullets})`; },
       homingBullets: p => { p.homingStrength = Math.min(1.0, p.homingStrength + 0.15); return `${powerupData.description} (${Math.floor(p.homingStrength * 100)}%)`; },
       bounce: p => { p.bounceCount++; return `${powerupData.description} (${p.bounceCount})`; },
@@ -3002,7 +2978,7 @@ class GameScene extends Phaser.Scene {
       spreadBullets: player.spreadBullets,
       homingStrength: player.homingStrength,
       bounceCount: player.bounceCount,
-      hasBackShot: player.hasBackShot,
+      backShotCount: player.backShotCount,
       iceDuration: player.iceDuration,
       fireDuration: player.fireDuration,
       electricDuration: player.electricDuration
