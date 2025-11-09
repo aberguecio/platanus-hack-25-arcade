@@ -446,10 +446,10 @@ function setButtonState(box, text, glow, selected, x, y, w, h, bgColor, normalCo
     box.fillRoundedRect(x, y, w, h, 10);
     box.strokeRoundedRect(x, y, w, h, 10);
     text.setScale(1.2).setColor('#ffff00');
-    glow.setAlpha(1);
+    glow.setAlpha(0.3);
   } else {
     text.setScale(1.0).setColor(normalColor);
-    glow.setAlpha(0.05);
+    glow.setAlpha(0.03);
   }
 }
 
@@ -767,7 +767,7 @@ class GameScene extends Phaser.Scene {
       }).setOrigin(1, 0);
     }
 
-    this.waveText = this.add.text(330, 2, 'Wave: 1', {
+    this.waveText = this.add.text(320, 2, 'Wave: 1', {
       fontSize: '16px',
       fontFamily: 'Arial',
       color: '#ff0',
@@ -775,7 +775,7 @@ class GameScene extends Phaser.Scene {
       strokeThickness: 1
     }).setOrigin(0.5, 0);
 
-    this.scoreText = this.add.text(470, 2, 'Score: 0', {
+    this.scoreText = this.add.text(480, 2, 'Score: 0', {
       fontSize: '16px',
       fontFamily: 'Arial',
       color: '#fff',
@@ -2312,13 +2312,12 @@ class GameScene extends Phaser.Scene {
     else {
       // Generate random boss (wave 30+)
       bossType = 'random';
-      const waveScale = (this.wave - 20) / 10;
+      const waveScale = (this.wave - 10) / 5;
       typeData = {
         health: 500 + waveScale * 500,
-        speed: 30,
-        shootDelay: Math.max(100, 1000 - waveScale * 200),
+        speed: this.wave,
+        shootDelay: Math.max(100, 1500 - waveScale * 200),
         color: Math.random() * 0xffffff,
-        points: 500 + waveScale * 500,
         size: Math.max(50 + Math.random() * 40 - this.wave, 30)
       };
       bossName = starPoints + '-STAR BOSS';
@@ -2368,7 +2367,6 @@ class GameScene extends Phaser.Scene {
 
       // Random boss properties
       if (bossType === 'random') {
-        boss.points = typeData.points;
         const allPatterns = ['wave', 'spiral', 'laser'];
         const count = 2 + Math.floor(Math.random() * 2); // 2-3 patterns
         boss.attackPatterns = [];
@@ -2411,6 +2409,7 @@ class GameScene extends Phaser.Scene {
         (Math.cos(angle) * radius - (boss.x - centerX)) * baseSpeed,
         (Math.sin(angle) * radius - (boss.y - centerY)) * baseSpeed
       );
+      const phaseDelay = 2000 * shootDelayMultiplier;
 
       // Wait 1s before attacks
       if (time - boss.spawnTime > 1000) {
@@ -2423,14 +2422,14 @@ class GameScene extends Phaser.Scene {
             this.shootSpiral(boss, 20, 3, Math.PI, 0, 200, 3000, 100);
             boss.spiralFired = true;
           }
-          if (phaseTime >= 2000) {
+          if (phaseTime >= phaseDelay) {
             boss.attackPhase = 1;
             boss.phaseStartTime = time;
             boss.spiralFired = false;
           }
-        } else if (boss.attackPhase === 1) {
+        } else if (boss.attackPhase === 1 || boss.attackPhase === 3) {
           // Pause 1: 2 segundos
-          if (phaseTime >= 2000) {
+          if (phaseTime >= phaseDelay) {
             boss.attackPhase = 2;
             boss.phaseStartTime = time;
           }
@@ -2442,17 +2441,11 @@ class GameScene extends Phaser.Scene {
           } else if (!boss.wave2Fired && phaseTime >= 500) {
             this.shootCircle(boss, 50, 0, 200, 20, 3000);
             boss.wave2Fired = true;
-          } else if (phaseTime >= 2000) {
+          } else if (phaseTime >= phaseDelay) {
             boss.attackPhase = 3;
             boss.phaseStartTime = time;
             boss.wave1Fired = false;
             boss.wave2Fired = false;
-          }
-        } else if (boss.attackPhase === 3) {
-          // Pause 2: 2 segundos
-          if (phaseTime >= 2000) {
-            boss.attackPhase = 0;
-            boss.phaseStartTime = time;
           }
         }
       }
@@ -2502,7 +2495,7 @@ class GameScene extends Phaser.Scene {
           } else {
             // End burst
             boss.burstActive = false;
-            boss.nextBurstTime = time + 500 + Math.random() * 2500; // 0.5-3 segundos de descanso
+            boss.nextBurstTime = time + 500 + Math.random() * 2500 * shootDelayMultiplier; // 0.5-3 segundos de descanso
           }
         }
       }
@@ -2754,7 +2747,6 @@ class GameScene extends Phaser.Scene {
       // Normal or random boss
       let bossName;
       if (boss.bossType === 'random') {
-        // Random boss uses stored points
         bossName = boss.starPoints + '-STAR BOSS';
       } else {
         const typeData = BOSS_TYPES[boss.bossType];
@@ -2864,6 +2856,12 @@ class GameScene extends Phaser.Scene {
 
   collectPowerup(player, powerup) {
     const type = powerup.type;
+
+    // Don't collect heart if already at full health
+    if (type === 'heart' && player.health >= player.maxHealth) {
+      return;
+    }
+
     const px = powerup.x;
     const py = powerup.y;
     const powerupData = POWERUP_TYPES[type];
@@ -2895,7 +2893,7 @@ class GameScene extends Phaser.Scene {
       iceBullets: p => { p.iceDuration = p.iceDuration === 0 ? 8000 : p.iceDuration + 4000; return `${powerupData.description} (${p.iceDuration / 1000}s)`; },
       fireBullets: p => { p.fireDuration = p.fireDuration === 0 ? 5000 : p.fireDuration + 3000; return `${powerupData.description} (${p.fireDuration / 1000}s)`; },
       electricBullets: p => { p.electricDuration = p.electricDuration === 0 ? 3000 : p.electricDuration + 2000; return `${powerupData.description} (${p.electricDuration / 1000}s)`; },
-      heart: p => { if (p.health < p.maxHealth) { p.health++; return `+1 HEART! (${p.health}/${p.maxHealth})`; } return 'Already at max health!'; },
+      heart: p => { p.health++; return `+1 HEART! (${p.health}/${p.maxHealth})`;},
       maxHeart: p => { p.maxHealth++; p.health++; return `MAX HEART UP! (${p.health}/${p.maxHealth})`; }
     };
     message = h[type] ? h[type](player) : '';
