@@ -2255,15 +2255,13 @@ class GameScene extends Phaser.Scene {
       const blockCount = 4 + Math.floor(Math.random() * 5);
       layout = [];
       for (let i = 0; i < blockCount; i++) {
-        layout.push({
-          x: 150 + Math.random() * 500,
-          y: 150 + Math.random() * 300,
-          w: 40 + Math.random() * 100,
-          h: 40 + Math.random() * 100
-        });
+        const w = 40 + Math.random() * 100;
+        const h = 40 + Math.random() * 100;
+        const x = Math.max(Math.random() * (800 - 60 - w/2), 60 + w/2);
+        const y = Math.max(Math.random() * (600 - 60 - h/2), 60 + h/2);
+        layout.push({x, y, w, h});
       }
     }
-
     // Create obstacles from layout
     layout.forEach(obs => {
       const obstacle = this.obstacles.create(obs.x, obs.y, null);
