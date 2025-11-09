@@ -119,17 +119,28 @@ class MenuScene extends Phaser.Scene {
       });
     }
 
-    // Menu options text
+    // Menu options with background boxes
+    this.box1 = this.add.graphics();
+    this.box2 = this.add.graphics();
+
+    // Neon glow for buttons
+    this.glow1 = addNeonText(this, 400, 240, '1 PLAYER', '40px', '#00ff00ff');
+    this.glow2 = addNeonText(this, 400, 310, '2 PLAYERS', '40px', '#0099ffff');
+
     this.text1 = this.add.text(400, 240, '1 PLAYER', {
       fontSize: '36px',
       fontFamily: 'Arial',
-      color: '#00ff00'
+      color: '#00ff00',
+      stroke: '#000',
+      strokeThickness: 6
     }).setOrigin(0.5);
 
     this.text2 = this.add.text(400, 310, '2 PLAYERS', {
       fontSize: '36px',
       fontFamily: 'Arial',
-      color: '#0099ff'
+      color: '#0099ff',
+      stroke: '#000',
+      strokeThickness: 6
     }).setOrigin(0.5);
 
 
@@ -195,18 +206,10 @@ class MenuScene extends Phaser.Scene {
       t.setScale(pulse);
     });
 
-    // Visual update
-    if (this.selectedOption === 0) {
-      this.text1.setScale(1.2);
-      this.text1.setColor('#ffff00');
-      this.text2.setScale(1.0);
-      this.text2.setColor('#0099ff');
-    } else {
-      this.text1.setScale(1.0);
-      this.text1.setColor('#00ff00');
-      this.text2.setScale(1.2);
-      this.text2.setColor('#ffff00');
-    }
+    // Visual update with backgrounds and glow
+    const sel = this.selectedOption === 0;
+    setButtonState(this.box1, this.text1, this.glow1, sel, 250, 215, 300, 50, 0x004400, '#00ff00');
+    setButtonState(this.box2, this.text2, this.glow2, !sel, 250, 285, 300, 50, 0x004488, '#0099ff');
   }
 
   startBackgroundMusic() {
@@ -424,7 +427,7 @@ const CONTROLS_CONFIG = {
 function addNeonText(scene, x, y, text, fontSize, color = '#ff3b3bff') {
   const group = scene.add.group();
   for (let i = 1; i <= 9; i++) {
-    const t = scene.add.text(x - 3 + i, y - 3 + i, text, {
+    const t = scene.add.text(x - 4 + i, y - 4 + i, text, {
       fontSize: fontSize,
       fontFamily: 'Arial',
       color: color
@@ -432,6 +435,22 @@ function addNeonText(scene, x, y, text, fontSize, color = '#ff3b3bff') {
     group.add(t);
   }
   return group;
+}
+
+// Helper function to apply button selection effects
+function setButtonState(box, text, glow, selected, x, y, w, h, bgColor, normalColor) {
+  box.clear();
+  if (selected) {
+    box.lineStyle(3, 0xffff00, 1);
+    box.fillStyle(bgColor, 0.3);
+    box.fillRoundedRect(x, y, w, h, 10);
+    box.strokeRoundedRect(x, y, w, h, 10);
+    text.setScale(1.2).setColor('#ffff00');
+    glow.setAlpha(1);
+  } else {
+    text.setScale(1.0).setColor(normalColor);
+    glow.setAlpha(0.05);
+  }
 }
 
 // Helper function to render player controls
@@ -748,16 +767,20 @@ class GameScene extends Phaser.Scene {
       }).setOrigin(1, 0);
     }
 
-    this.waveText = this.add.text(400, 20, 'Wave: 1', {
-      fontSize: '20px',
-      fontFamily: 'Arial',
-      color: '#ff0'
-    }).setOrigin(0.5, 0);
-
-    this.scoreText = this.add.text(400, 45, 'Score: 0', {
+    this.waveText = this.add.text(330, 2, 'Wave: 1', {
       fontSize: '16px',
       fontFamily: 'Arial',
-      color: '#fff'
+      color: '#ff0',
+      stroke: '#000',
+      strokeThickness: 1
+    }).setOrigin(0.5, 0);
+
+    this.scoreText = this.add.text(470, 2, 'Score: 0', {
+      fontSize: '16px',
+      fontFamily: 'Arial',
+      color: '#fff',
+      stroke: '#000',
+      strokeThickness: 1
     }).setOrigin(0.5, 0);
 
     // Debug info
@@ -789,17 +812,14 @@ class GameScene extends Phaser.Scene {
   update(time, delta) {
     if (this.gameOver) return;
 
-    // Clear and redraw
-    this.graphics.clear();
-
     // Handle pause menu
     if (this.isPaused) {
       this.drawPauseMenu();
       return;
     }
 
-    // Clear pause graphics when not paused
-    this.pauseGraphics.clear();
+    // Clear and redraw
+    this.graphics.clear();
 
     // Background grid
     this.graphics.lineStyle(1, 0x2a2a2a, 0.7);
@@ -1952,8 +1972,8 @@ class GameScene extends Phaser.Scene {
     // Create texts if not exist
     if (this.pauseTexts.length === 0) {
       // Title
-      this.pauseTexts.push(this.add.text(400, 100, 'PAUSED', {
-        fontSize: '48px',
+      this.pauseTexts.push(this.add.text(400, 150, 'PAUSED', {
+        fontSize: '54px',
         fontFamily: 'Arial',
         color: '#ffff00',
         stroke: '#000',
@@ -1961,14 +1981,14 @@ class GameScene extends Phaser.Scene {
       }).setOrigin(0.5));
 
       // Controls title
-      this.pauseTexts.push(this.add.text(400, 180, 'CONTROLS', {
+      this.pauseTexts.push(this.add.text(400, 230, 'CONTROLS', {
         fontSize: '28px',
         fontFamily: 'Arial',
         color: '#00ff00'
       }).setOrigin(0.5));
 
       // Render player controls with stroke
-      renderPlayerControls(this, 200, 240, CONTROLS_CONFIG.player1, {
+      renderPlayerControls(this, 300, 290, CONTROLS_CONFIG.player1, {
         titleSize: '20px',
         controlSize: '16px',
         spacing: 25,
@@ -1976,7 +1996,7 @@ class GameScene extends Phaser.Scene {
         textArray: this.pauseTexts
       });
 
-      renderPlayerControls(this, 600, 240, CONTROLS_CONFIG.player2, {
+      renderPlayerControls(this, 500, 290, CONTROLS_CONFIG.player2, {
         titleSize: '20px',
         controlSize: '16px',
         spacing: 25,
