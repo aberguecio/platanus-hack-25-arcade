@@ -89,14 +89,8 @@ class MenuScene extends Phaser.Scene {
     this.selectedOption = 0; // 0 = 1 player, 1 = 2 players
     this.startBackgroundMusic();
 
-    // Title with glow effect
-    this.titleText = this.add.text(400, 120, 'OBSCURANTISM', {
-      fontSize: '64px',
-      fontFamily: 'Arial',
-      color: '#ff0000',
-      stroke: '#000',
-      strokeThickness: 8
-    }).setOrigin(0.5);
+    // Title with neon glow effect
+    this.neonGlow = addNeonText(this, 400, 120, 'OBSCURANTISM', '68px');
 
     // Subtitle
     this.add.text(400, 180, 'Wave Survival Arena', {
@@ -197,7 +191,9 @@ class MenuScene extends Phaser.Scene {
 
     // Title pulse effect
     const pulse = 1 + Math.sin(time * 0.003) * 0.05;
-    this.titleText.setScale(pulse);
+    this.neonGlow.getChildren().forEach((t, i) => {
+      t.setScale(pulse);
+    });
 
     // Visual update
     if (this.selectedOption === 0) {
@@ -423,6 +419,20 @@ const CONTROLS_CONFIG = {
     controls: ['Move: IJKL', 'Shoot: U/P', 'Special: O']
   }
 };
+
+// Helper function to create neon glow text effect
+function addNeonText(scene, x, y, text, fontSize, color = '#ff3b3bff') {
+  const group = scene.add.group();
+  for (let i = 1; i <= 9; i++) {
+    const t = scene.add.text(x - 3 + i, y - 3 + i, text, {
+      fontSize: fontSize,
+      fontFamily: 'Arial',
+      color: color
+    }).setOrigin(0.5).setAlpha(0.7).setBlendMode(Phaser.BlendModes.ADD);
+    group.add(t);
+  }
+  return group;
+}
 
 // Helper function to render player controls
 function renderPlayerControls(scene, x, startY, playerConfig, options = {}) {
@@ -1996,14 +2006,8 @@ class GameScene extends Phaser.Scene {
     overlay.fillStyle(0x000000, 0.9);
     overlay.fillRect(0, 0, 800, 600);
 
-    // Title
-    this.add.text(400, 75, 'SILENCED', {
-      fontSize: '56px',
-      fontFamily: 'Arial',
-      color: '#f00',
-      stroke: '#660000',
-      strokeThickness: 8
-    }).setOrigin(0.5);
+    // Title with neon glow effect
+    addNeonText(this, 400, 75, 'SILENCED', '70px');
 
     // Main stats
     this.add.text(400, 140, 'Wave Reached: ' + this.stats.highestWave, {
