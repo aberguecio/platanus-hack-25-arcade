@@ -64,19 +64,16 @@ if (ARCADE_MODE) {
 // High scores system
 const getHighScores = () => {
   try {
-    const scores = document.cookie.match('(^| )obs_highScores=([^;]+)');
-    return scores ? JSON.parse(decodeURIComponent(scores[2])) : [];
+    const stored = localStorage.getItem('obs_highScores');
+    return stored ? JSON.parse(stored) : [];
   } catch(e) {
     return [];
   }
 };
 
-const setCookie = (name, value) => {
+const setHighScores = (scores) => {
   try {
-    const d = new Date();
-    d.setTime(d.getTime() + 31536000000);
-    const expires = 'expires=' + d.toUTCString();
-    document.cookie = `${name}=${encodeURIComponent(value)};${expires};path=/;SameSite=Lax`;
+    localStorage.setItem('obs_highScores', JSON.stringify(scores));
   } catch (e) {
   }
 }
@@ -2004,7 +2001,7 @@ class GameScene extends Phaser.Scene {
       fontSize: '56px',
       fontFamily: 'Arial',
       color: '#f00',
-      stroke: '#000',
+      stroke: '#660000',
       strokeThickness: 8
     }).setOrigin(0.5);
 
@@ -2031,7 +2028,7 @@ class GameScene extends Phaser.Scene {
       scores.push({name, score});
       scores.sort((a, b) => b.score - a.score);
       scores = scores.slice(0, 5); // Keep only top 5
-      setCookie('obs_highScores', JSON.stringify(scores));
+      setHighScores(scores);
     };
 
     // High score entry
