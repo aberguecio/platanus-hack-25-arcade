@@ -7,10 +7,10 @@ const DEBUG_GODMODE = false;        // Set to true for invincibility
 const DIFFICULTY = 1;            // Difficulty multiplier
 
 const COOP_DIFFICULTY = 1.3;       // Multiplier for 2-player mode (affects enemy count & spawn rate and boss health)
-const ARCADE_MODE = false;
+const ARCADE_MODE = false;          // Set to true to enable arcade-style controls and UI
 
 
-
+let CONTROLS_CONFIG = {};
 if (ARCADE_MODE) {
   const ARCADE_CONTROLS = {
     // ===== PLAYER 1 CONTROLS =====
@@ -48,6 +48,19 @@ if (ARCADE_MODE) {
     'START2': ['Enter']
   };
 
+  CONTROLS_CONFIG = {
+    player1: {
+      title: 'PLAYER 1',
+      color: '#00ff00',
+      controls: ['Move: Left Joystick', 'Shoot: Left A', 'Special: Left B']
+    },
+    player2: {
+      title: 'PLAYER 2',
+      color: '#0099ff',
+      controls: ['Move: Right Joystick', 'Shoot: Right A', 'Special: Right B']
+    }
+  };
+
   // Build reverse lookup: keyboard key → arcade button code
   const KEYBOARD_TO_ARCADE = {};
   for (const [arcadeCode, keyboardKeys] of Object.entries(ARCADE_CONTROLS)) {
@@ -57,6 +70,19 @@ if (ARCADE_MODE) {
       keys.forEach(key => {
         KEYBOARD_TO_ARCADE[key] = arcadeCode;
       });
+    }
+  }
+} else {
+  CONTROLS_CONFIG = {
+    player1: {
+      title: 'PLAYER 1',
+      color: '#00ff00',
+      controls: ['Move: WASD', 'Shoot: Q/R', 'Special: E']
+    },
+    player2: {
+      title: 'PLAYER 2',
+      color: '#0099ff',
+      controls: ['Move: IJKL', 'Shoot: U/P', 'Special: O']
     }
   }
 }
@@ -157,11 +183,19 @@ class MenuScene extends Phaser.Scene {
     renderPlayerControls(this, 600, 430, CONTROLS_CONFIG.player2);
 
     // Instructions for menu navigation
-    this.add.text(400, 560, 'Press W/S to select, Enter to start', {
-      fontSize: '16px',
-      fontFamily: 'Arial',
-      color: '#888'
-    }).setOrigin(0.5);
+    if (ARCADE_MODE) {
+      this.add.text(400, 560, 'Use Joystick to select, Start to begin', {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        color: '#888'
+      }).setOrigin(0.5);
+    } else {
+      this.add.text(400, 560, 'Press W/S to select, Enter to start', {
+        fontSize: '16px',
+        fontFamily: 'Arial',
+        color: '#888'
+      }).setOrigin(0.5);
+    }
 
     // Keyboard input
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -414,20 +448,6 @@ const POWERUP_TYPES = {
     name: 'Max Heart',
     color: 0xff00ff,
     description: 'Max Hearts +1'
-  }
-};
-
-// CONTROL CONFIGURATION
-const CONTROLS_CONFIG = {
-  player1: {
-    title: 'PLAYER 1',
-    color: '#00ff00',
-    controls: ['Move: WASD', 'Shoot: Q/R', 'Special: E']
-  },
-  player2: {
-    title: 'PLAYER 2',
-    color: '#0099ff',
-    controls: ['Move: IJKL', 'Shoot: U/P', 'Special: O']
   }
 };
 
