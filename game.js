@@ -1601,8 +1601,8 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < count; i++) {
       const a = offset + i * Math.PI * 2 / count;
       this.createEnemyBullet(src.x + Math.cos(a) * rad, src.y + Math.sin(a) * rad, Math.cos(a) * spd, Math.sin(a) * spd, lifetime);
-      this.playSound(400, 0.1)
     }
+    this.playSound(400, 0.1)
   }
 
   // Helper: shoot single aimed bullet (reused by triangle, laser boss)
@@ -1652,14 +1652,14 @@ class GameScene extends Phaser.Scene {
   shootEnemy(e, t) {
     const s = 200;
     const p = {
-      triangle: () => { this.shootAimed(e, t, s); this.playSound(400, 0.1); },
-      square: () => { this.shootCircle(e, 4, 0, s); this.playSound(400, 0.1); },
+      triangle: () => { this.shootAimed(e, t, s); this.playSound(450, 0.1); },
+      square: () => { this.shootCircle(e, 4, 0, s); },
       pentagon: () => {
-        this.shootCircle(e, 5, 0, s); this.playSound(450, 0.12);
-        this.time.delayedCall(250, () => { if (e.active) { this.shootCircle(e, 5, Math.PI / 5, s); this.playSound(450, 0.12); } });
-        this.time.delayedCall(500, () => { if (e.active) { this.shootCircle(e, 5, 0, s); this.playSound(450, 0.12); } });
+        this.shootCircle(e, 5, 0, s);
+        this.time.delayedCall(250, () => { if (e.active) { this.shootCircle(e, 5, Math.PI / 5, s);} });
+        this.time.delayedCall(500, () => { if (e.active) { this.shootCircle(e, 5, 0, s); } });
       },
-      hexagon: () => { this.shootSpiral(e, 8, 2, Math.PI*2, 0, s, 3000, 200); this.playSound(500, 0.1); },
+      hexagon: () => { this.shootSpiral(e, 8, 2, Math.PI*2, 0, s, 3000, 200); },
       spinner: () => {
         const a = Math.atan2(t.y - e.y, t.x - e.x);
         for (let i = 0; i < 3; i++) {
