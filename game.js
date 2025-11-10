@@ -2270,32 +2270,30 @@ class GameScene extends Phaser.Scene {
   }
 
   loadMap() {
-    // Clear existing obstacles
     this.obstacles.clear(true, true);
     this.obstacleData = [];
+    let layout = this.level <= MAP_LAYOUTS.length ? MAP_LAYOUTS[this.level - 1] : [];
 
-    // Get map layout: 4 predefined, then random every 10 waves
-    let layout;
-    if (this.level <= MAP_LAYOUTS.length) {
-      layout = MAP_LAYOUTS[this.level - 1];
-    } else {
-      // Generate random map (4-8 blocks)
-      const blockCount = 4 + Math.floor(Math.random() * 5);
-      layout = [];
-      for (let i = 0; i < blockCount; i++) {
-        const w = 40 + Math.random() * 100;
-        const h = 40 + Math.random() * 100;
-        const x = Math.max(Math.random() * (800 - 60 - w/2), 60 + w/2);
-        const y = Math.max(Math.random() * (600 - 60 - h/2), 60 + h/2);
-        layout.push({x, y, w, h});
+    if (!layout.length) {
+      const r = Math.random(), n = 2 + Math.floor(r * 3);
+      for (let i = 0; i < n; i++) {
+        const w = 40 + Math.random() * 80, h = 40 + Math.random() * 80;
+        const x = Math.max(Math.random() * (380 - w/2), 60 + w/2);
+        const y = Math.max(Math.random() * (280 - h/2), 60 + h/2);
+        [0,1,2,3].forEach(q => layout.push({
+          x: q & 1 ? 800 - x : x,
+          y: q & 2 ? 600 - y : y,
+          w, h
+        }));
       }
+      if (r < 0.5) layout.push({x: 400, y: 300, w: 20 + 80 * r, h: 20 + 80 * r});
     }
-    // Create obstacles from layout
-    layout.forEach(obs => {
-      const obstacle = this.obstacles.create(obs.x, obs.y, null);
-      obstacle.body.setSize(obs.w, obs.h);
-      obstacle.setVisible(false);
-      this.obstacleData.push(obs);
+
+    layout.forEach(o => {
+      const obs = this.obstacles.create(o.x, o.y, null);
+      obs.body.setSize(o.w, o.h);
+      obs.setVisible(false);
+      this.obstacleData.push(o);
     });
   }
 
