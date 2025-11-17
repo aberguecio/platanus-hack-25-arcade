@@ -87,21 +87,29 @@ if (ARCADE_MODE) {
   }
 }
 
-// High scores system
-const getHighScores = () => {
+// High scores system - API config
+const API_BASE = 'https://highscores.berguecio.cl';
+const GAME_ID = 'g_a156dfb0f37b4136';
+
+const getHighScores = async () => {
   try {
-    const stored = localStorage.getItem('obs_highScores');
-    return stored ? JSON.parse(stored) : [];
+    const res = await fetch(`${API_BASE}/games/${GAME_ID}/highscores?limit=5`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.highscores.map(s => ({name: s.player_name, score: s.score}));
   } catch(e) {
     return [];
   }
 };
 
-const setHighScores = (scores) => {
+const setHighScores = async (name, score) => {
   try {
-    localStorage.setItem('obs_highScores', JSON.stringify(scores));
-  } catch (e) {
-  }
+    await fetch(`${API_BASE}/games/${GAME_ID}/highscores`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({player_name: name, score})
+    });
+  } catch(e) {}
 }
 
 // MENU SCENE
@@ -133,25 +141,27 @@ class MenuScene extends Phaser.Scene {
       fontFamily: 'Arial',
       color: '#ffcc00'
     }).setOrigin(0.5);
-    
-    const scores = getHighScores();
-    if (scores.length > 0) {
 
-      scores.forEach((score, i) => {
-        this.add.text(400, 410 + i * 25, `${i + 1}. ${score.name} - ${score.score}`, {
-          fontSize: '16px',
-          fontFamily: 'Arial',
-          color: i === 0 ? '#ffcc00' : '#cc9900'
-        }).setOrigin(0.5);
-      });
-    } else {
-      this.add.text(400, 410, 'No high scores yet.', {
-        fontSize: '16px',
-        fontFamily: 'Arial',
-        color: '#888'
-      }).setOrigin(0.5);
+    // Loading text
+    const loadingText = this.add.text(400, 410, 'Loading...', {
+      fontSize: '16px',
+      fontFamily: 'Arial',
+      color: '#cc9900'
+    }).setOrigin(0.5);
 
-    }
+    // Load high scores asynchronously
+    getHighScores().then(scores => {
+      loadingText.destroy();
+      if (scores.length > 0) {
+        scores.forEach((score, i) => {
+          this.add.text(400, 410 + i * 25, `${i + 1}. ${score.name} - ${score.score}`, {
+            fontSize: '16px',
+            fontFamily: 'Arial',
+            color: i === 0 ? '#ffcc00' : '#cc9900'
+          }).setOrigin(0.5);
+        });
+      }
+    });
 
     // Menu options with background boxes
     this.box1 = this.add.graphics();
@@ -1837,7 +1847,7 @@ class GameScene extends Phaser.Scene {
         this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff8800, 10);
 
         // up to 10% chance to drop a heart
-        if (Math.random() < (Math.min(0.1, (this.wave / 10) * this.getSpawnDifficulty()))) {
+        if (Math.random() < Math.max(Math.min(Math.min(0.1 * this.getSpawnDifficulty(), (this.wave / 100)), 0.3-(this.wave / 100))), 0.01) {
           this.spawnPowerup({ x: deathPosition.x, y: deathPosition.y }, 'heart');
         }
       }
@@ -2046,21 +2056,15 @@ class GameScene extends Phaser.Scene {
       color: '#fff'
     }).setOrigin(0.5);
 
-    const isHighScore = (score) => {
-      const scores = getHighScores();
+    const isHighScore = async (score) => {
+      const scores = await getHighScores();
       return scores.length < 5 || score > scores[scores.length - 1].score;
     };
 
-    const saveHighScore = (name, score) => {
-      let scores = getHighScores();
-      scores.push({name, score});
-      scores.sort((a, b) => b.score - a.score);
-      scores = scores.slice(0, 5); // Keep only top 5
-      setHighScores(scores);
-    };
-
     // High score entry
-    if (isHighScore(this.score)) {
+    isHighScore(this.score).then(isHigh => {
+      if (!isHigh) return;
+
       let n=['A','A','A','A','A'], p=0;
       const nm = n.map((c,i)=>i===p ? `[${c}]` : c).join('');
       this.add.text(400,430,'NEW HIGH SCORE!',{
@@ -2075,7 +2079,7 @@ class GameScene extends Phaser.Scene {
         color:'#b800c2ff',
         align: 'center'
       }).setOrigin(0.5);
-      
+
       const h=(e)=>{
         const k=e.key.toLowerCase();
         if(k==='w')n[p]=String.fromCharCode((n[p].charCodeAt(0)-65+1)%26+65);
@@ -2083,7 +2087,7 @@ class GameScene extends Phaser.Scene {
         else if(k==='a')p=Math.max(0,p-1);
         else if(k==='d')p=Math.min(4,p+1);
         else if(k==='enter'){
-          saveHighScore(n.join(''), this.score);
+          setHighScores(n.join(''), this.score);
           this.input.keyboard.off('keydown',h);
           tn.setText('SAVED!\n'+n.join('')+' - '+this.score);
           return;
@@ -2091,7 +2095,7 @@ class GameScene extends Phaser.Scene {
         tn.setText('NAME: '+n.map((c,i)=>i===p ? `[${c}]` : c).join(''));
       };
       this.input.keyboard.on('keydown',h);
-    }
+    });
 
     // Match statistics section
     this.add.text(400, 210, 'MATCH STATISTICS', {
