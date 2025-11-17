@@ -326,6 +326,7 @@ class MenuScene extends Phaser.Scene {
   }
 
   startGame() {
+    this.scene.stop();
     const players = this.selectedOption === 0 ? 1 : 2;
     this.scene.start('StoryScene', { players });
   }
@@ -1847,7 +1848,7 @@ class GameScene extends Phaser.Scene {
         this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff8800, 10);
 
         // up to 10% chance to drop a heart
-        if (Math.random() < Math.max(Math.min(Math.min(0.1 * this.getSpawnDifficulty(), (this.wave / 100)), 0.3-(this.wave / 100))), 0.01) {
+        if (Math.random() < Math.max(Math.min(Math.min(0.1 * this.getSpawnDifficulty(), (this.wave / 100)), 0.3 -(this.wave / 100)), 0.01)) {
           this.spawnPowerup({ x: deathPosition.x, y: deathPosition.y }, 'heart');
         }
       }
@@ -2056,46 +2057,37 @@ class GameScene extends Phaser.Scene {
       color: '#fff'
     }).setOrigin(0.5);
 
-    const isHighScore = async (score) => {
-      const scores = await getHighScores();
-      return scores.length < 5 || score > scores[scores.length - 1].score;
+    // High score entry (always save)
+    let n=['A','A','A','A','A','A'], p=0;
+    const nm = n.map((c,i)=>i===p ? `[${c}]` : c).join('');
+    this.add.text(400,430,'SAVE HIGH SCORE',{
+      fontSize:'32px',
+      fontFamily:'Arial',
+      color:'#ece000ff',
+      align: 'center'
+    }).setOrigin(0.5);
+    const tn=this.add.text(400,470,'NAME: '+nm,{
+      fontSize:'32px',
+      fontFamily:'Arial',
+      color:'#b800c2ff',
+      align: 'center'
+    }).setOrigin(0.5);
+
+    const h=(e)=>{
+      const k=e.key.toLowerCase();
+      if(k==='w')n[p]=String.fromCharCode((n[p].charCodeAt(0)-65+1)%26+65);
+      else if(k==='s')n[p]=String.fromCharCode((n[p].charCodeAt(0)-65+25)%26+65);
+      else if(k==='a')p=Math.max(0,p-1);
+      else if(k==='d')p=Math.min(5,p+1);
+      else if(k==='enter'){
+        setHighScores(n.join(''), this.score);
+        this.input.keyboard.off('keydown',h);
+        tn.setText('SAVED!\n'+n.join('')+' - '+this.score);
+        return;
+      }
+      tn.setText('NAME: '+n.map((c,i)=>i===p ? `[${c}]` : c).join(''));
     };
-
-    // High score entry
-    isHighScore(this.score).then(isHigh => {
-      if (!isHigh) return;
-
-      let n=['A','A','A','A','A'], p=0;
-      const nm = n.map((c,i)=>i===p ? `[${c}]` : c).join('');
-      this.add.text(400,430,'NEW HIGH SCORE!',{
-        fontSize:'32px',
-        fontFamily:'Arial',
-        color:'#ece000ff',
-        align: 'center'
-      }).setOrigin(0.5);
-      const tn=this.add.text(400,470,'NAME: '+nm,{
-        fontSize:'32px',
-        fontFamily:'Arial',
-        color:'#b800c2ff',
-        align: 'center'
-      }).setOrigin(0.5);
-
-      const h=(e)=>{
-        const k=e.key.toLowerCase();
-        if(k==='w')n[p]=String.fromCharCode((n[p].charCodeAt(0)-65+1)%26+65);
-        else if(k==='s')n[p]=String.fromCharCode((n[p].charCodeAt(0)-65+25)%26+65);
-        else if(k==='a')p=Math.max(0,p-1);
-        else if(k==='d')p=Math.min(4,p+1);
-        else if(k==='enter'){
-          setHighScores(n.join(''), this.score);
-          this.input.keyboard.off('keydown',h);
-          tn.setText('SAVED!\n'+n.join('')+' - '+this.score);
-          return;
-        }
-        tn.setText('NAME: '+n.map((c,i)=>i===p ? `[${c}]` : c).join(''));
-      };
-      this.input.keyboard.on('keydown',h);
-    });
+    this.input.keyboard.on('keydown',h);
 
     // Match statistics section
     this.add.text(400, 210, 'MATCH STATISTICS', {
