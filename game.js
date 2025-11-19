@@ -7,7 +7,7 @@ const DEBUG_GODMODE = false;        // Set to true for invincibility
 const DIFFICULTY = 1;            // Difficulty multiplier
 
 const COOP_DIFFICULTY = 1.3;       // Multiplier for 2-player mode (affects enemy count & spawn rate and boss health)
-const ARCADE_MODE = false;          // Set to true to enable arcade-style controls and UI
+const ARCADE_MODE = true;          // Set to true to enable arcade-style controls and UI
 
 
 let CONTROLS_CONFIG = {};
@@ -374,7 +374,7 @@ const ENEMY_TYPES = {
 const BOSS_TYPES = {
   pattern: {health: 500, speed: 30, shootDelay: 1500, size: 50, name: 'Shooting Star', color: 0xffff00},
   twins: {health: 1200, speed: 40, shootDelay: 2000, size: 40, name: 'Twins Shifter´s', color: [0xff00ff, 0x00ffff]},
-  laser: {health: 2000, speed: 50, shootDelay: 800, size: 50, name: 'Ultimate Laser', color: 0x00ffaa}
+  laser: {health: 2000, speed: 50, shootDelay: 800, size: 40, name: 'Ultimate Laser', color: 0x00ffaa}
 };
 
 // POWERUP TYPE DEFINITIONS
@@ -1837,7 +1837,7 @@ class GameScene extends Phaser.Scene {
         this.createExplosionEffect(deathPosition.x, deathPosition.y, 0xff8800, 10);
 
         // up to 10% chance to drop a heart
-        if (Math.random() < (Math.min(0.1, (this.wave / 10) * this.getSpawnDifficulty()))) {
+        if (Math.random() < Math.max(Math.min(Math.min(0.1 * this.getSpawnDifficulty(), (this.wave / 100)), 0.3 -(this.wave / 100)), 0.01)) {
           this.spawnPowerup({ x: deathPosition.x, y: deathPosition.y }, 'heart');
         }
       }
